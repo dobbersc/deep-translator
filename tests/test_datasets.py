@@ -1,6 +1,8 @@
+from pathlib import Path
+
 import pytest
 
-from translator.corpus import DataPoint, ParallelCorpus
+from translator.datasets import DataPoint, EuroparlCorpus, ParallelCorpus
 
 
 class TestParallelCorpus:
@@ -33,3 +35,30 @@ class TestParallelCorpus:
                 source_language="de",
                 target_language="en",
             )
+
+
+class TestEuroparlCorpus:
+    def test_load_valid_corpus(self, tmp_path: Path) -> None:
+        cache_directory: Path = tmp_path / "datasets" / "europarl"
+        de_language_path: Path = cache_directory / "europarl-v7.de-en.de"
+        en_language_path: Path = cache_directory / "europarl-v7.de-en.en"
+
+        # Load de -> en parallel corpus
+        corpus: EuroparlCorpus = EuroparlCorpus.load("de", "en", cache_directory=tmp_path)
+        assert de_language_path.exists()
+        assert en_language_path.exists()
+
+        de_last_modified: float = de_language_path.stat().st_mtime
+        en_last_modified: float = en_language_path.stat().st_mtime
+
+        # Load en -> de parallel corpus (cached)
+        reverse_corpus: EuroparlCorpus = EuroparlCorpus.load("en", "de", cache_directory=tmp_path)
+        assert len(corpus) == len(reverse_corpus) == 1920209
+
+        # Check if cached data has been used
+        assert de_language_path.stat().st_mtime == de_last_modified
+        assert en_language_path.stat().st_mtime == en_last_modified
+
+    def test_load_invalid_corpus(self) -> None:
+        with pytest.raises(ValueError, match="No parallel corpus was found"):
+            EuroparlCorpus.load("INVALID", "en")
