@@ -1,14 +1,12 @@
 import http.client
 import urllib.request
 from pathlib import Path
-from typing import Any, NoReturn, TypeVar
+from typing import Any
 
 from tqdm import tqdm
 
-T = TypeVar("T")
 
-
-class DownloadProgressBar(tqdm[NoReturn]):
+class DownloadProgressBar(tqdm):  # type: ignore[type-arg]
     """TQDM progress bar that provides an update hook based on a download's progress."""
 
     def __init__(
