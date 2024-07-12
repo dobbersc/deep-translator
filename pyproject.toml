@@ -89,7 +89,6 @@ select = [
     "YTT",
     # "ANN",
     "ASYNC",
-    "TRIO",
     "S",
     "BLE",
     "FBT",
