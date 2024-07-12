@@ -33,10 +33,12 @@ class ParallelCorpus(Sequence[DataPoint]):
         self.target_language = target_language
 
     @overload
-    def __getitem__(self, index: int) -> DataPoint: ...
+    def __getitem__(self, index: int) -> DataPoint:
+        ...
 
     @overload
-    def __getitem__(self, index: slice) -> Sequence[DataPoint]: ...
+    def __getitem__(self, index: slice) -> Sequence[DataPoint]:
+        ...
 
     def __getitem__(self, index: int | slice) -> DataPoint | Sequence[DataPoint]:
         if isinstance(index, int):
@@ -123,6 +125,19 @@ class EuroparlCorpus(ParallelCorpus):
         url: str = "https://www.statmt.org/europarl/v7/",
         version: str = "v7",
     ) -> Self:
+        """Loads the Europarl parallel corpus from ISO language codes.
+
+        Args:
+            source_language: The language code of the source language (ISO 639 Set 1).
+            target_language: The language code of the target language (ISO 639 Set 1).
+            cache_directory: The directory where to cache the dataset files for future use.
+                Per default, the package's cache directory will be used.
+            url: The URL to the server where the corpus archives are located.
+            version: The version of the corpus.
+
+        Returns:
+            The Europarl parallel corpus of the specified languages.
+        """
         corpus_stem: str
         if (source_language, target_language) in cls.VALID_LANGUAGES:
             corpus_stem = f"{source_language}-{target_language}"
