@@ -23,7 +23,8 @@ classifiers = [
 ]
 keywords = ["natural language processing", "machine translation", "deep learning"]
 dependencies = [
-    "torch~=2.3",
+    "torch~=2.3.0",
+    "tqdm~=4.66.0",
 ]
 
 [project.urls]
@@ -31,11 +32,11 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "black~=24.4",
-    "mypy~=1.10",
-    "pytest~=8.2",
-    "pytest-cov~=5.0",
-    "ruff~=0.4",
+    "black~=24.4.0",
+    "mypy~=1.10.0",
+    "pytest~=8.2.0",
+    "pytest-cov~=5.0.0",
+    "ruff~=0.5.0",
 ]
 
 [tool.black]
