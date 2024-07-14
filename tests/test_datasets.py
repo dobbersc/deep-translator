@@ -84,6 +84,30 @@ class TestParallelCorpus:
                 target_language="en",
             )
 
+    def test_downsample(self) -> None:
+        corpus: ParallelCorpus = ParallelCorpus(
+            source_sentences=[f"Satz {i}" for i in range(100)],
+            target_sentences=[f"Sentence {i}" for i in range(100)],
+            source_language="de",
+            target_language="en",
+        )
+
+        downsampled: ParallelCorpus = corpus.downsample(0.1)
+        assert len(downsampled) == 10
+
+    def test_split(self) -> None:
+        corpus: ParallelCorpus = ParallelCorpus(
+            source_sentences=[f"Satz {i}" for i in range(100)],
+            target_sentences=[f"Sentence {i}" for i in range(100)],
+            source_language="de",
+            target_language="en",
+        )
+
+        train, dev, test = corpus.split(0.7, 0.1, 0.2)
+        assert len(train) == 70
+        assert len(dev) == 10
+        assert len(test) == 20
+
 
 class TestEuroparlCorpus:
     def test_load_valid_corpus(self, tmp_path: Path) -> None:

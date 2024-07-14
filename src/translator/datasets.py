@@ -6,7 +6,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Final, NamedTuple, Self, overload
 
+import numpy as np
 import torch
+from sklearn.model_selection import train_test_split
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 
@@ -136,6 +138,45 @@ class ParallelCorpus(Sequence[DataPoint]):
         self.target_sentences = target_sentences
         self.source_language = source_language
         self.target_language = target_language
+
+    def downsample(self, size: float, random_state: int | np.random.RandomState | None = 42) -> Self:
+        sources, _, targets, _ = train_test_split(
+            self.source_sentences,
+            self.target_sentences,
+            train_size=size,
+            shuffle=True,
+            random_state=random_state,
+        )
+        return type(self)(sources, targets, self.source_language, self.target_language)
+
+    def split(
+        self,
+        train_size: float = 0.7,
+        dev_size: float = 0.1,
+        test_size: float = 0.2,
+        random_state: int | np.random.RandomState | None = 42,
+    ) -> tuple[Self, Self, Self]:
+        source_train_and_dev, source_test, target_train_and_dev, target_test = train_test_split(
+            self.source_sentences,
+            self.target_sentences,
+            test_size=test_size,
+            shuffle=True,
+            random_state=random_state,
+        )
+        source_train, source_dev, target_train, target_dev = train_test_split(
+            source_train_and_dev,
+            target_train_and_dev,
+            train_size=train_size / (train_size + dev_size),
+            shuffle=True,
+            random_state=random_state,
+        )
+
+        languages: tuple[str, str] = (self.source_language, self.target_language)
+        return (
+            type(self)(source_train, target_train, *languages),
+            type(self)(source_dev, target_dev, *languages),
+            type(self)(source_test, target_test, *languages),
+        )
 
     @overload
     def __getitem__(self, index: int) -> DataPoint:
