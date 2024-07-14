@@ -1,5 +1,5 @@
 from collections import Counter
-from collections.abc import Iterable, Iterator, Sized
+from collections.abc import Iterable, Sized
 from typing import Self
 
 
