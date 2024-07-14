@@ -23,6 +23,7 @@ classifiers = [
 ]
 keywords = ["natural language processing", "machine translation", "deep learning"]
 dependencies = [
+    "numpy~=2.0.0",
     "regex==2024.5.15",
     "sacremoses~=0.1.0",
     "torch~=2.3.0",
@@ -61,6 +62,8 @@ warn_return_any = true
 warn_unreachable = true
 warn_unused_configs = true
 warn_unused_ignores = true
+
+plugins = "numpy.typing.mypy_plugin"
 
 [[tool.mypy.overrides]]
 module = "sacremoses.*"
