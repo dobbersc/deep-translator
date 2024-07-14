@@ -20,10 +20,12 @@ PLOTS_PATH = RESULTS_PATH / "plots"
 
 
 def count_(
-    mode: Literal["word", "word_length", "sentence_length", "pos_tags"],
+    mode: Literal["word", "word_length", "sentence_length", "pos_tags", "sentence_lenth_difference"],
     sentence: str,
     language: str,
     tagger: Language | None = None,
+    second_sentence: str | None = None,
+    second_language: str | None = None,
 ) -> Counter[int] | Counter[str]:
     """Based on the mode counts different aspcets of the input setence.
 
@@ -31,7 +33,12 @@ def count_(
         mode: Based on the mode a different counter is returned.
         sentence: The sentence based on which the counter will be created.
         language: The language in which the input sentence is written.
-        tagger: Spacy pipeline to extract POS-tag.
+        tagger: Spacy pipeline to extract POS-tag. Defaults to None.
+        second_sentence: The second sentence in case the mode requires one. Defaults to None.
+        second_language: The language in which the second sentence is written. Defaults to None.
+
+    Raises:
+        ValueError: In case the input parameters combination is wrong.
 
     Returns:
         Counter containing different counts based on mode.
@@ -49,7 +56,14 @@ def count_(
         if tagger is not None:
             doc = tagger(sentence)
             return Counter([token.tag_ for token in doc])
-        msg = "The tagger can't be set to None when the mode is 'pos_tags'"
+        msg = f"The tagger can't be set to None when the mode is '{mode}'"
+        raise ValueError(msg)
+    if mode == "sentence_lenth_difference":
+        if second_sentence is not None and second_language is not None:
+            tokens_first_sentence = preprocess(sentence, language=language)
+            tokens_second_sentence = preprocess(second_sentence, language=language)
+            return Counter([len(tokens_first_sentence)-len(tokens_second_sentence)])
+        msg = f"The second sentence or langugage can't be set to None when the mode is '{mode}'"
         raise ValueError(msg)
     return Counter()  # type: ignore[unreachable]
 
@@ -103,6 +117,49 @@ def load_german_spacy_tagger() -> Language:
         "de_core_news_sm",
         exclude=("morphologizer", "parser", "lemmatizer", "senter", "attribute_ruler", "ner"),
     )
+
+def sentence_length_difference(
+    corpus: EuroparlCorpus | DataPoint | Sequence[DataPoint],
+    source_language: str,
+    target_language: str,
+    threshold: int = 1,
+) -> None:
+    """Plots the distribution of the sentence length difference between source and target language sentences.
+
+    Args:
+        corpus: EuroparlCorpus, a EuroparlCorpus slice or a EuroparlCorpus data point.
+        source_language: Souce language.
+        target_language: Target language.
+        threshold (int, optional): Counts below the threshold are discarded. Defaults to 1.
+    """
+    counter: Counter[int] = Counter()
+    for sentence_pair in tqdm(corpus):
+        data_point = cast(DataPoint, sentence_pair)
+        counter.update(
+            count_( # type: ignore[arg-type]
+                mode="sentence_lenth_difference",
+                sentence=data_point.source_sentence,
+                language=source_language,
+                second_sentence=data_point.target_sentence,
+                second_language=target_language,
+            ),
+        )
+
+    fig, ax = plt.subplots()
+    items = apply_threshold(counter, threshold=threshold).items()
+    labels, values = zip(*items, strict=False)
+    ax.bar(labels, values)
+    ax.set_ylabel("Frequency")
+    plt.xticks(np.arange(min(labels), max(labels) + 1, 5))
+    plt.xlabel(f"Difference ({source_language}-{target_language})")
+
+    from_to = LONG_FORM[source_language] + "-" + LONG_FORM[target_language]
+    fig.suptitle(f"Difference in sentence length in {from_to} Parallel Corpus")
+    fig.tight_layout()
+    filename = f"sentence_length_difference_{threshold}_{source_language}_{target_language}{PREFERRED_PLOT_EXTENSION}"
+    plt.savefig(PLOTS_PATH / filename)
+    plt.close(fig)
+
 
 
 def load_spacy_tagger(language: str) -> Language:
@@ -276,7 +333,7 @@ def main() -> None:
     length_(corpus, corpus.source_language, corpus.target_language, mode="word", threshold=100000)
     length_(corpus, corpus.source_language, corpus.target_language, mode="sentence", threshold=310)
     part_of_speech_tags(random.sample(corpus, 100000), corpus.source_language, corpus.target_language, k=10)
-
+    sentence_length_difference(corpus, corpus.source_language, corpus.target_language, threshold=500)
 
 if __name__ == "__main__":
     PLOTS_PATH.mkdir(parents=True, exist_ok=True)
