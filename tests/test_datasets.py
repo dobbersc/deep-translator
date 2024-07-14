@@ -53,7 +53,7 @@ class TestEuroparlCorpus:
 
         # Load en -> de parallel corpus (cached)
         reverse_corpus: EuroparlCorpus = EuroparlCorpus.load("en", "de", cache_directory=tmp_path)
-        assert len(corpus) == len(reverse_corpus) == 1920209
+        assert len(corpus) == len(reverse_corpus) == 1908920  # Before pre-processing: 1920209
 
         # Check if cached data has been used
         assert de_language_path.stat().st_mtime == de_last_modified
