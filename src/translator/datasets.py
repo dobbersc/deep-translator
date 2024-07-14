@@ -16,11 +16,15 @@ from translator.utils.download import download_from_url
 
 
 class DataPoint(NamedTuple):
+    """Encapsulated the source and target for machine translation."""
+
     source: str
     target: str
 
 
 class VectorizedDataPoint(NamedTuple):
+    """Encapsulated the vectorized source and target for machine translation."""
+
     source: Tensor
     target: Tensor
 
