@@ -103,27 +103,27 @@ class Language(Sized):
         """
         return self.idx2token[index]
 
-    def encode(self, tokens: Iterable[str]) -> Iterator[int]:
+    def encode(self, tokens: Iterable[str]) -> list[int]:
         """Encodes tokens to their index representation.
 
         Args:
             tokens: An iterable of tokens.
 
         Returns:
-            An iterator of indices corresponding to the input tokens.
+            An list of indices corresponding to the input tokens.
         """
-        return map(self.get_index, tokens)
+        return [self.get_index(token) for token in tokens]
 
-    def decode(self, indices: Iterable[int]) -> Iterator[str]:
+    def decode(self, indices: Iterable[int]) -> list[str]:
         """Decodes indices to their token representation.
 
         Args:
             indices: An iterable of indices.
 
         Returns:
-            An iterator of tokens corresponding to the input indices.
+            An list of tokens corresponding to the input indices.
         """
-        return map(self.get_token, indices)
+        return [self.get_token(index) for index in indices]
 
     @property
     def padding_token_index(self) -> int:

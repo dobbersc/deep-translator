@@ -17,8 +17,8 @@ class TestLanguage:
         assert language.get_index("weiterer") == language.unknown_token_index
         assert language.get_token(5) == "Dies"
 
-        assert tuple(language.encode(("Ein", "Beispielsatz", "."))) == (language.unknown_token_index, 8)
-        assert tuple(language.decode((language.unknown_token_index, 8))) == ("<UNK>", "Beispielsatz", ".")
+        assert language.encode(("Ein", "Beispielsatz", ".")) == [language.unknown_token_index, 8, 9]
+        assert language.decode((language.unknown_token_index, 8, 9)) == ["<UNK>", "Beispielsatz", "."]
 
         assert language.padding_token_index == 0
         assert language.start_token_index == 1
