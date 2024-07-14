@@ -102,7 +102,31 @@ class EuroparlCorpus(ParallelCorpus):
         source_sentences: Sequence[str],
         target_sentences: Sequence[str],
     ) -> tuple[Sequence[str], Sequence[str]]:
-        return source_sentences, target_sentences  # TODO: Implement proper pre-processing
+        """Pre-processes the dataset's source and target sentences.
+
+        This function applies the following pre-processing steps:
+
+        - Removes data points with an empty source or target sentence.
+        - TODO: ...
+
+        Args:
+            source_sentences: A sequence of source sentences.
+            target_sentences: A sequence of target sentences.
+
+        Returns:
+            The pre-processed source and target sentences.
+        """
+        processed_source_sentences: list[str] = []
+        processed_target_sentences: list[str] = []
+
+        for source_sentence, target_sentence in zip(source_sentences, target_sentences, strict=True):
+            if not source_sentence or not target_sentence:
+                continue
+
+            processed_source_sentences.append(source_sentence)
+            processed_target_sentences.append(target_sentence)
+
+        return processed_source_sentences, processed_target_sentences
 
     @classmethod
     def from_files(
