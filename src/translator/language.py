@@ -3,7 +3,7 @@ from collections.abc import Iterable, Sized
 from typing import Self
 
 
-def _valide_token(token: str) -> None:
+def _validate_token(token: str) -> None:
     reserved_token_to_error_message: dict[str, str] = {
         "<PAD>": "The reserved token '<PAD>' for padding sequences of unequal lengths exists inside the provided data.",
         "<START>": "The reserved token '<START>' to mark the source's start exists inside the provided data.",
@@ -30,7 +30,7 @@ def build_language_dictionary(sentences: Iterable[Iterable[str]], unk_threshold:
 
     token_counter: Counter[str] = Counter(token for sentence in sentences for token in sentence)
     for token, count in token_counter.items():
-        _valide_token(token)
+        _validate_token(token)
         if count >= unk_threshold:
             token2idx[token] = len(token2idx)
 
