@@ -1,5 +1,5 @@
 from collections import Counter
-from collections.abc import Iterable, Sized
+from collections.abc import Iterable, Iterator, Sized
 from typing import Self
 
 
@@ -102,6 +102,28 @@ class Language(Sized):
             The index's token.
         """
         return self.idx2token[index]
+
+    def encode(self, tokens: Iterable[str]) -> Iterator[int]:
+        """Encodes tokens to their index representation.
+
+        Args:
+            tokens: An iterable of tokens.
+
+        Returns:
+            An iterator of indices corresponding to the input tokens.
+        """
+        return map(self.get_index, tokens)
+
+    def decode(self, indices: Iterable[int]) -> Iterator[str]:
+        """Decodes indices to their token representation.
+
+        Args:
+            indices: An iterable of indices.
+
+        Returns:
+            An iterator of tokens corresponding to the input indices.
+        """
+        return map(self.get_token, indices)
 
     @property
     def padding_token_index(self) -> int:
