@@ -1,14 +1,65 @@
 from pathlib import Path
 
 import pytest
+import torch
 
-from translator.datasets import DataPoint, EuroparlCorpus, ParallelCorpus
+from translator.datasets import (
+    DataPoint,
+    EuroparlCorpus,
+    ParallelCorpus,
+    ParallelDataLoader,
+    VectorizedDataPointBatch,
+    VectorizedParallelDataset,
+)
+from translator.language import Language
+
+
+@pytest.fixture()
+def vectorized_dataset() -> VectorizedParallelDataset:
+    source_sentences: list[list[str]] = [
+        "Dies ist ein Beispielsatz .".split(),
+        "Dies ist ein weiterer Beispielsatz .".split(),
+    ]
+    target_sentences: list[list[str]] = [
+        "This is an example sentence .".split(),
+        "This is another example sentence .".split(),
+    ]
+    return VectorizedParallelDataset(
+        source_sentences=source_sentences,
+        target_sentences=target_sentences,
+        source_language=Language.from_sentences("de", source_sentences),
+        target_language=Language.from_sentences("en", target_sentences),
+    )
+
+
+class TestVectorizedParallelDataset:
+    def test_valid_dataset(self, vectorized_dataset: VectorizedParallelDataset) -> None:
+        assert len(vectorized_dataset) == 2
+        assert (vectorized_dataset[0].source == torch.tensor((5, 6, 7, 8, 9), dtype=torch.float)).all()
+        assert (vectorized_dataset[0].target == torch.tensor((5, 6, 7, 8, 9, 10), dtype=torch.float)).all()
+
+    def test_invalid_source_and_target_sentences(self) -> None:
+        with pytest.raises(ValueError, match="requires the same number of source and target sentences."):
+            VectorizedParallelDataset(
+                source_sentences=["Satz 1".split(), "Satz 2".split()],
+                target_sentences=["Sentence 1".split(), "Sentence 2".split(), "Sentence 3".split()],
+                source_language=Language.from_sentences("de", []),
+                target_language=Language.from_sentences("en", []),
+            )
+
+
+def test_parallel_data_loader(vectorized_dataset: VectorizedParallelDataset) -> None:
+    data_loader: ParallelDataLoader = ParallelDataLoader(vectorized_dataset, batch_size=2)
+    assert len(data_loader) == 1
+
+    batch: VectorizedDataPointBatch = next(iter(data_loader))
+    assert len(batch) == 2
+    assert (batch.sources == torch.tensor(((5, 6, 7, 8, 9, 0), (5, 6, 7, 10, 8, 9)), dtype=torch.long)).all()
+    assert (batch.targets == torch.tensor(((5, 6, 7, 8, 9, 10), (5, 6, 11, 8, 9, 10)), dtype=torch.long)).all()
 
 
 class TestParallelCorpus:
-    def test_properties(
-        self,
-    ) -> None:
+    def test_valid_corpus(self) -> None:
         corpus: ParallelCorpus = ParallelCorpus(
             source_sentences=["Satz 1", "Satz 2", "Satz 3"],
             target_sentences=["Sentence 1", "Sentence 2", "Sentence 3"],
@@ -25,12 +76,9 @@ class TestParallelCorpus:
         assert corpus[:2] == (DataPoint("Satz 1", "Sentence 1"), DataPoint("Satz 2", "Sentence 2"))
 
     def test_invalid_source_and_target_sentences(self) -> None:
-        with pytest.raises(
-            ValueError,
-            match="The parallel corpus requires the same number of source and target sentences.",
-        ):
+        with pytest.raises(ValueError, match="requires the same number of source and target sentences."):
             ParallelCorpus(
-                source_sentences=["Satz 1", "Satz2"],
+                source_sentences=["Satz 1", "Satz 2"],
                 target_sentences=["Sentence 1", "Sentence 2", "Sentence 3"],
                 source_language="de",
                 target_language="en",

@@ -1,18 +1,119 @@
 import shutil
 import urllib.parse
 import urllib.request
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence, Sized
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Final, NamedTuple, Self, overload
+from typing import Any, Final, NamedTuple, Self, overload
+
+import torch
+from torch import Tensor
+from torch.utils.data import DataLoader, Dataset
 
 import translator
+from translator.language import Language
 from translator.utils.download import download_from_url
 
 
 class DataPoint(NamedTuple):
-    source_sentence: str
-    target_sentence: str
+    source: str
+    target: str
+
+
+class VectorizedDataPoint(NamedTuple):
+    source: Tensor
+    target: Tensor
+
+
+class VectorizedDataPointBatch(Sequence[VectorizedDataPoint]):
+    def __init__(self, *data_points: VectorizedDataPoint, source_padding_value: int, target_padding_value: int) -> None:
+        if not data_points:
+            msg: str = "Received empty batch of data points."
+            raise ValueError(msg)
+
+        self._data_points = data_points
+        self.source_padding_value = source_padding_value
+        self.target_padding_value = target_padding_value
+
+        sources, targets = zip(*self._data_points, strict=True)
+        self.sources: Tensor = torch.nn.utils.rnn.pad_sequence(
+            list(sources),
+            batch_first=True,
+            padding_value=source_padding_value,
+        )
+        self.targets: Tensor = torch.nn.utils.rnn.pad_sequence(
+            list(targets),
+            batch_first=True,
+            padding_value=target_padding_value,
+        )
+
+    @overload
+    def __getitem__(self, index: int) -> VectorizedDataPoint:
+        ...
+
+    @overload
+    def __getitem__(self, index: slice) -> Self:
+        ...
+
+    def __getitem__(self, index: int | slice) -> VectorizedDataPoint | Self:
+        if isinstance(index, int):
+            return self._data_points[index]
+        return type(self)(
+            *self._data_points[index],
+            source_padding_value=self.source_padding_value,
+            target_padding_value=self.target_padding_value,
+        )
+
+    def __len__(self) -> int:
+        return len(self._data_points)
+
+
+class VectorizedParallelDataset(Dataset[VectorizedDataPoint], Sized):
+    def __init__(
+        self,
+        source_sentences: Sequence[Sequence[str]],
+        target_sentences: Sequence[Sequence[str]],
+        source_language: Language,
+        target_language: Language,
+    ) -> None:
+        if len(source_sentences) != len(target_sentences):
+            msg: str = f"The {type(self).__name__} requires the same number of source and target sentences."
+            raise ValueError(msg)
+
+        self.source_sentences = source_sentences
+        self.target_sentences = target_sentences
+        self.source_language = source_language
+        self.target_language = target_language
+
+    def __getitem__(self, index: int) -> VectorizedDataPoint:
+        return VectorizedDataPoint(
+            torch.tensor(self.source_language.encode(self.source_sentences[index]), dtype=torch.long),
+            torch.tensor(self.target_language.encode(self.target_sentences[index]), dtype=torch.long),
+        )
+
+    def __len__(self) -> int:
+        return len(self.source_sentences)
+
+
+class ParallelDataLoader(DataLoader[VectorizedDataPoint]):
+    def __init__(
+        self,
+        dataset: VectorizedParallelDataset,
+        *args: Any,
+        collate_fn: Callable[[list[VectorizedDataPoint]], VectorizedDataPointBatch] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        source_padding_value = dataset.source_language.padding_token_index
+        target_padding_value = dataset.target_language.padding_token_index
+        if collate_fn is None:
+            kwargs["collate_fn"] = lambda batch: VectorizedDataPointBatch(
+                *batch,
+                source_padding_value=source_padding_value,
+                target_padding_value=target_padding_value,
+            )
+        else:
+            kwargs["collate_fn"] = collate_fn
+        super().__init__(dataset, *args, **kwargs)
 
 
 class ParallelCorpus(Sequence[DataPoint]):
@@ -24,7 +125,7 @@ class ParallelCorpus(Sequence[DataPoint]):
         target_language: str,
     ) -> None:
         if len(source_sentences) != len(target_sentences):
-            msg: str = "The parallel corpus requires the same number of source and target sentences."
+            msg: str = f"The {type(self).__name__} requires the same number of source and target sentences."
             raise ValueError(msg)
 
         self.source_sentences = source_sentences
