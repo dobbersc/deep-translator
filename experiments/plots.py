@@ -1,4 +1,3 @@
-import functools
 import random
 import string
 from collections import Counter
@@ -7,7 +6,8 @@ from typing import Any, Literal, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
-import spacy
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 from spacy.language import Language
 from tqdm import tqdm
 
@@ -15,19 +15,21 @@ from translator.datasets import DataPoint, EuroparlCorpus
 from translator.preprocessing import preprocess
 
 from experiments import LONG_FORM, PREFERRED_PLOT_EXTENSION, RESULTS_PATH
+from experiments.spacy_taggers import load_spacy_tagger
 
 PLOTS_PATH = RESULTS_PATH / "plots"
+MODES = Literal["word", "word_length", "sentence_length", "pos_tags", "sentence_lenth_difference"]
 
 
 def count_(
-    mode: Literal["word", "word_length", "sentence_length", "pos_tags", "sentence_lenth_difference"],
+    mode: MODES,
     sentence: str,
     language: str,
     tagger: Language | None = None,
     second_sentence: str | None = None,
     second_language: str | None = None,
 ) -> Counter[int] | Counter[str]:
-    """Based on the mode counts different aspcets of the input setence.
+    """Based on the mode counts different aspcets of the input sentence.
 
     Args:
         mode: Based on the mode a different counter is returned.
@@ -62,10 +64,69 @@ def count_(
         if second_sentence is not None and second_language is not None:
             tokens_first_sentence = preprocess(sentence, language=language)
             tokens_second_sentence = preprocess(second_sentence, language=language)
-            return Counter([len(tokens_first_sentence)-len(tokens_second_sentence)])
+            return Counter([len(tokens_first_sentence) - len(tokens_second_sentence)])
         msg = f"The second sentence or langugage can't be set to None when the mode is '{mode}'"
         raise ValueError(msg)
     return Counter()  # type: ignore[unreachable]
+
+
+def _fill_counters(
+    counters: dict[str, Counter[Any]] | Counter[Any],
+    corpus: EuroparlCorpus | DataPoint | Sequence[DataPoint],
+    source_language: str,
+    target_language: str,
+    *,
+    mode: MODES,
+    tagger_source: Language | None = None,
+    tagger_target: Language | None = None,
+) -> dict[str, Counter[Any]] | Counter[Any]:
+    """Based on the mode fills the counters that are passed with the corresponding values.
+
+    Args:
+        counters: Either a single Counter or a dictionary of Counters (one for each language).
+        corpus: EuroparlCorpus, a EuroparlCorpus slice or a EuroparlCorpus data point.
+        source_language: Souce language.
+        target_language: Target language.
+        mode: Determines the values with which the counters are filled.
+        tagger_source: Only relevant for POS-tagging. Defaults to None.
+        tagger_target: Only relevant for POS-tagging. Defaults to None.
+
+    Returns:
+        The filled Counter(s).
+    """
+    if isinstance(counters, Counter):
+        for sentence_pair in tqdm(corpus):
+            data_point = cast(DataPoint, sentence_pair)
+            counters.update(
+                count_(
+                    mode=mode,
+                    sentence=data_point.source_sentence,
+                    language=source_language,
+                    second_sentence=data_point.target_sentence,
+                    second_language=target_language,
+                ),
+            )
+    else:
+        for sentence_pair in tqdm(corpus):
+            data_point = cast(DataPoint, sentence_pair)
+            counters[source_language].update(
+                count_(
+                    mode=mode,
+                    sentence=data_point.source_sentence,
+                    language=source_language,
+                    tagger=tagger_source,
+                ),
+            )
+            counters[target_language].update(
+                count_(
+                    mode=mode,
+                    sentence=data_point.target_sentence,
+                    language=target_language,
+                    tagger=tagger_target,
+                ),
+            )
+
+    return counters
 
 
 def apply_threshold(counter: Counter[Any], threshold: int) -> Counter[Any]:
@@ -93,30 +154,59 @@ def remove_punctuation(counter: Counter[Any]) -> Counter[Any]:
     return Counter({key: count for key, count in counter.items() if key not in string.punctuation})
 
 
-@functools.lru_cache(maxsize=1)
-def load_english_spacy_tagger() -> Language:
-    """Loads the english spacy pipeline and excludes some not needed components.
+def _barplot_categorical(labels: tuple[str], values: tuple[int], ax: Axes, *, title: str = "") -> None:
+    """Plots barplot for categorical values.
 
-    Returns:
-        English spacy pipeline for POS-tagging.
+    Args:
+        labels: Categorical values.
+        values: Values corresponding to each category.
+        ax: On this axis the plot is created.
+        title: The axis title, which is optional. Defaults to None.
     """
-    return spacy.load(
-        "en_core_web_sm",
-        exclude=("parser", "senter", "attribute_ruler", "lemmatizer", "ner"),
-    )
+    x = np.arange(1, len(labels) + 1)
+    ax.bar(x, values)
+    ax.set_xticks(x, labels, rotation=30, ha="right")
+    ax.set_ylabel("Frequency")
+    ax.set_title(title)
 
 
-@functools.lru_cache(maxsize=1)
-def load_german_spacy_tagger() -> Language:
-    """Loads the german spacy pipeline and excludes some not needed components.
+def _barplot_numerical(labels: tuple[int], values: tuple[int], ax: Axes, *, title: str = "") -> None:
+    """Plots barplot for numerical values.
 
-    Returns:
-        German spacy pipeline for POS-tagging.
+    Args:
+        labels: X-coordinates of the values.
+        values: Values corresponding to each label.
+        ax: On this axis the plot is created.
+        title: The axis title, which is optional. Defaults to None.
     """
-    return spacy.load(
-        "de_core_news_sm",
-        exclude=("morphologizer", "parser", "lemmatizer", "senter", "attribute_ruler", "ner"),
-    )
+    ax.bar(labels, values)
+    ax.set_ylabel("Frequency")
+    ax.set_title(title)
+
+
+def set_fig_title(fig: Figure, title: str, source_language: str, target_language: str) -> None:
+    """Sets the title of the specified figure.
+
+    Args:
+        fig: Figure whose title is set.
+        title: Title of the figure.
+        source_language (str): Used to determine corpus name.
+        target_language (str): Used to determine corpus name.
+    """
+    corpus_name = LONG_FORM[source_language] + "-" + LONG_FORM[target_language] + " Parallel Corpus"
+    fig.suptitle(f"{title} in {corpus_name}")
+
+
+def savefig_(filename: str, fig: Figure) -> None:
+    """Saves the plot under the specified file name and closes the figure.
+
+    Args:
+        filename: File name under which the plot is saved. The prefered extension is appended automatically.
+        fig: Figure of the plot, which is closed after the plot is saved.
+    """
+    plt.savefig(PLOTS_PATH / f"{filename+PREFERRED_PLOT_EXTENSION}")
+    plt.close(fig)
+
 
 def sentence_length_difference(
     corpus: EuroparlCorpus | DataPoint | Sequence[DataPoint],
@@ -130,56 +220,27 @@ def sentence_length_difference(
         corpus: EuroparlCorpus, a EuroparlCorpus slice or a EuroparlCorpus data point.
         source_language: Souce language.
         target_language: Target language.
-        threshold (int, optional): Counts below the threshold are discarded. Defaults to 1.
+        threshold: Counts below the threshold are discarded. Defaults to 1.
     """
     counter: Counter[int] = Counter()
-    for sentence_pair in tqdm(corpus):
-        data_point = cast(DataPoint, sentence_pair)
-        counter.update(
-            count_( # type: ignore[arg-type]
-                mode="sentence_lenth_difference",
-                sentence=data_point.source_sentence,
-                language=source_language,
-                second_sentence=data_point.target_sentence,
-                second_language=target_language,
-            ),
-        )
+    _fill_counters(
+        counter,
+        corpus,
+        source_language,
+        target_language,
+        mode="sentence_lenth_difference",
+    )
 
     fig, ax = plt.subplots()
     items = apply_threshold(counter, threshold=threshold).items()
     labels, values = zip(*items, strict=False)
-    ax.bar(labels, values)
-    ax.set_ylabel("Frequency")
+    _barplot_numerical(labels, values, ax)
     plt.xticks(np.arange(min(labels), max(labels) + 1, 5))
     plt.xlabel(f"Difference ({source_language}-{target_language})")
 
-    from_to = LONG_FORM[source_language] + "-" + LONG_FORM[target_language]
-    fig.suptitle(f"Difference in sentence length in {from_to} Parallel Corpus")
+    set_fig_title(fig, "Sentence length difference distribution", source_language, target_language)
     fig.tight_layout()
-    filename = f"sentence_length_difference_{threshold}_{source_language}_{target_language}{PREFERRED_PLOT_EXTENSION}"
-    plt.savefig(PLOTS_PATH / filename)
-    plt.close(fig)
-
-
-
-def load_spacy_tagger(language: str) -> Language:
-    """Loads the spacy pipeline corresponding to the language provided.
-
-    Args:
-        language: Determines the spacy pipeline that is loaded.
-
-    Raises:
-        ValueError: In case the specified language is not supported.
-
-    Returns:
-        Spacy pipeline for POS-tagging.
-    """
-    if language == "en":
-        return load_english_spacy_tagger()
-    if language == "de":
-        return load_german_spacy_tagger()
-    msg = f"Language {language} is not supported."
-    raise ValueError(msg)
+    savefig_(f"sentence_length_difference_{threshold}_{source_language}_{target_language}", fig)
 
 
 def part_of_speech_tags(
@@ -196,17 +257,18 @@ def part_of_speech_tags(
         target_language: Target language.
         k: Number of POS-tags to plot. Defaults to 10.
     """
-    source_tagger = load_spacy_tagger(source_language)
-    target_tagger = load_spacy_tagger(target_language)
+    tagger_source = load_spacy_tagger(source_language)
+    tagger_target = load_spacy_tagger(target_language)
     counters: dict[str, Counter[int]] = {source_language: Counter(), target_language: Counter()}
-    for sentence_pair in tqdm(corpus):
-        data_point = cast(DataPoint, sentence_pair)
-        counters[source_language].update(
-            count_("pos_tags", data_point.source_sentence, source_language, tagger=source_tagger),  # type: ignore[arg-type]
-        )
-        counters[target_language].update(
-            count_("pos_tags", data_point.target_sentence, target_language, tagger=target_tagger),  # type: ignore[arg-type]
-        )
+    _fill_counters(
+        counters,
+        corpus,
+        source_language,
+        target_language,
+        mode="pos_tags",
+        tagger_source=tagger_source,
+        tagger_target=tagger_target,
+    )
 
     fig, _ = plt.subplots(nrows=2, ncols=1, sharey=True)
 
@@ -214,18 +276,11 @@ def part_of_speech_tags(
         items = counters[language].most_common(k)
         labels, values = zip(*items, strict=False)
         ax = fig.get_axes()[i]
-        x = np.arange(1, len(labels) + 1)
-        ax.bar(x, values)
-        ax.set_xticks(x, labels, rotation=30, ha="right")
-        ax.set_ylabel("Frequency")
-        ax.set_title(f"{LONG_FORM[language]}")
+        _barplot_categorical(labels, values, ax, title=f"{LONG_FORM[language]}")
 
-    from_to = LONG_FORM[source_language] + "-" + LONG_FORM[target_language]
-    fig.suptitle(f"Top-{k} Most Frequent POS-Tags in {from_to} Parallel Corpus")
+    set_fig_title(fig, f"Top-{k} Most Frequent POS-Tags", source_language, target_language)
     fig.tight_layout()
-    filename = f"top_{k}_pos_tags_{source_language}_{target_language}{PREFERRED_PLOT_EXTENSION}"
-    plt.savefig(PLOTS_PATH / filename)
-    plt.close(fig)
+    savefig_(f"top_{k}_pos_tags_{source_language}_{target_language}", fig)
 
 
 def length_(
@@ -245,39 +300,31 @@ def length_(
         threshold: Counts below the threshold are discarded. Defaults to 1.
     """
     counters: dict[str, Counter[int]] = {source_language: Counter(), target_language: Counter()}
-    for sentence_pair in tqdm(corpus):
-        data_point = cast(DataPoint, sentence_pair)
-        counters[source_language].update(count_(f"{mode}_length", data_point.source_sentence, source_language))  # type: ignore[arg-type]
-        counters[target_language].update(count_(f"{mode}_length", data_point.target_sentence, target_language))  # type: ignore[arg-type]
+    _fill_counters(
+        counters,
+        corpus,
+        source_language,
+        target_language,
+        mode=cast(MODES, f"{mode}_length"),
+    )
 
     fig, _ = plt.subplots(nrows=2, ncols=1, sharey=True, sharex=True)
     max_value = -1
-    print(counters)
     for i, language in enumerate([source_language, target_language]):
         items = apply_threshold(counters[language], threshold=threshold).items()
         labels, values = zip(*items, strict=False)
         ax = fig.get_axes()[i]
-        ax.bar(labels, values)
-        ax.set_ylabel("Frequency")
-        ax.set_title(f"{LONG_FORM[language]}")
+        _barplot_numerical(labels, values, ax, title=f"{LONG_FORM[language]}")
         max_value = max(max_value, *labels)
 
     step = 1 if mode == "word" else 10
-    plt.xticks(np.arange(0, max_value + 1, step))
+    start = 1 if mode == "word" else 0
+    plt.xticks(np.arange(start, max_value + 1, step))
     plt.xlabel(f"{mode.capitalize()} Length")
 
-    fig.suptitle(
-        (
-            f"{mode.capitalize()} length distribution "
-            f"for {LONG_FORM[source_language]}-{LONG_FORM[target_language]} "
-            "Parallel Corpus"
-        ),
-    )
-
+    set_fig_title(fig, f"{mode.capitalize()} Length Distribution", source_language, target_language)
     fig.tight_layout()
-    filename = f"{mode}_length_{threshold}_{source_language}_{target_language}{PREFERRED_PLOT_EXTENSION}"
-    plt.savefig(PLOTS_PATH / filename)
-    plt.close(fig)
+    savefig_(f"{mode}_length_{threshold}_{source_language}_{target_language}", fig)
 
 
 def most_frequent_words(
@@ -289,16 +336,13 @@ def most_frequent_words(
     """Plots the k most frequent words for each language.
 
     Args:
-        corpus: corpus: EuroparlCorpus, a EuroparlCorpus slice or a EuroparlCorpus data point.
-        source_language (str): Source language.
-        target_language (str): Target language.
+        corpus: EuroparlCorpus, a EuroparlCorpus slice or a EuroparlCorpus data point.
+        source_language: Source language.
+        target_language: Target language.
         k: The k most frequent words are plotted. Defaults to 20.
     """
     counters: dict[str, Counter[str]] = {source_language: Counter(), target_language: Counter()}
-    for sentence_pair in tqdm(corpus):
-        data_point = cast(DataPoint, sentence_pair)
-        counters[source_language].update(count_("word", data_point.source_sentence, source_language))  # type: ignore[arg-type]
-        counters[target_language].update(count_("word", data_point.target_sentence, target_language))  # type: ignore[arg-type]
+    _fill_counters(counters, corpus, source_language, target_language, mode="word")
 
     fig, _ = plt.subplots(nrows=2, ncols=1, sharey=True)
 
@@ -306,23 +350,11 @@ def most_frequent_words(
         items = remove_punctuation(counters[language]).most_common(k)
         labels, values = zip(*items, strict=False)
         ax = fig.get_axes()[i]
-        x = np.arange(1, len(labels) + 1)
-        ax.bar(x, values)
-        ax.set_xticks(x, labels, rotation=30, ha="right")
-        ax.set_ylabel("Frequency")
-        ax.set_title(f"{LONG_FORM[language]}")
+        _barplot_categorical(labels, values, ax, title=f"{LONG_FORM[language]}")
 
-    fig.suptitle(
-        (
-            f"Top-{k} Most Frequent Words "
-            f"in {LONG_FORM[source_language]}-{LONG_FORM[target_language]} "
-            "Parallel Corpus"
-        ),
-    )
+    set_fig_title(fig, f"Top-{k} Most Frequent Words", source_language, target_language)
     fig.tight_layout()
-    filename = f"top_{k}_most_frequent_{source_language}_{target_language}{PREFERRED_PLOT_EXTENSION}"
-    plt.savefig(PLOTS_PATH / filename)
-    plt.close(fig)
+    savefig_(f"top_{k}_most_frequent_{source_language}_{target_language}", fig)
 
 
 def main() -> None:
@@ -334,6 +366,7 @@ def main() -> None:
     length_(corpus, corpus.source_language, corpus.target_language, mode="sentence", threshold=310)
     part_of_speech_tags(random.sample(corpus, 100000), corpus.source_language, corpus.target_language, k=10)
     sentence_length_difference(corpus, corpus.source_language, corpus.target_language, threshold=500)
+
 
 if __name__ == "__main__":
     PLOTS_PATH.mkdir(parents=True, exist_ok=True)
