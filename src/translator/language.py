@@ -3,7 +3,7 @@ from collections.abc import Iterable, Sized
 from typing import Self
 
 
-def _valide_token(token: str) -> None:
+def _validate_token(token: str) -> None:
     reserved_token_to_error_message: dict[str, str] = {
         "<PAD>": "The reserved token '<PAD>' for padding sequences of unequal lengths exists inside the provided data.",
         "<START>": "The reserved token '<START>' to mark the source's start exists inside the provided data.",
@@ -30,7 +30,7 @@ def build_language_dictionary(sentences: Iterable[Iterable[str]], unk_threshold:
 
     token_counter: Counter[str] = Counter(token for sentence in sentences for token in sentence)
     for token, count in token_counter.items():
-        _valide_token(token)
+        _validate_token(token)
         if count >= unk_threshold:
             token2idx[token] = len(token2idx)
 
@@ -102,6 +102,28 @@ class Language(Sized):
             The index's token.
         """
         return self.idx2token[index]
+
+    def encode(self, tokens: Iterable[str]) -> list[int]:
+        """Encodes tokens to their index representation.
+
+        Args:
+            tokens: An iterable of tokens.
+
+        Returns:
+            An list of indices corresponding to the input tokens.
+        """
+        return [self.get_index(token) for token in tokens]
+
+    def decode(self, indices: Iterable[int]) -> list[str]:
+        """Decodes indices to their token representation.
+
+        Args:
+            indices: An iterable of indices.
+
+        Returns:
+            An list of tokens corresponding to the input indices.
+        """
+        return [self.get_token(index) for index in indices]
 
     @property
     def padding_token_index(self) -> int:

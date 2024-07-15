@@ -1,6 +1,7 @@
 import functools
 import unicodedata
-from typing import Final, Literal
+from collections.abc import Iterator
+from typing import Final, Literal, Protocol
 
 import regex
 from sacremoses import MosesTokenizer
@@ -11,6 +12,17 @@ __PROBLEM_CHARACTERS_PATTERN: Final[regex.Pattern[str]] = regex.compile(__CONTRO
 
 def remove_problem_characters(text: str) -> str:
     return __PROBLEM_CHARACTERS_PATTERN.sub("", text)
+
+
+class Tokenizer(Protocol):
+    """Protocol for tokenizer functions.
+
+    A tokenizer splits a text into semantic segments, i.e. tokens.
+    This may include pre-processing steps, e.g. Unicode normalization, lowercasing or verbalization of tokens.
+    """
+
+    def __call__(self, text: str) -> Iterator[str]:
+        ...
 
 
 @functools.cache
@@ -26,7 +38,7 @@ def preprocess(
     segmentation_level: Literal["word", "subword", "character"] = "word",
     lowercase: bool = False,
 ) -> list[str]:
-    """Pre-processes the input text.
+    """Pre-processes and tokenizes the input text.
 
     Pre-processing steps:
 
