@@ -1,6 +1,8 @@
 import functools
+
 import spacy
 from spacy.language import Language
+
 
 @functools.lru_cache(maxsize=1)
 def load_english_spacy_tagger() -> Language:
@@ -11,7 +13,7 @@ def load_english_spacy_tagger() -> Language:
     """
     return spacy.load(
         "en_core_web_sm",
-        exclude=("parser", "senter", "attribute_ruler", "lemmatizer", "ner"),
+        exclude=("parser", "senter", "lemmatizer", "ner"),
     )
 
 
@@ -24,11 +26,11 @@ def load_german_spacy_tagger() -> Language:
     """
     return spacy.load(
         "de_core_news_sm",
-        exclude=("morphologizer", "parser", "lemmatizer", "senter", "attribute_ruler", "ner"),
+        exclude=("tagger", "parser", "lemmatizer", "senter", "attribute_ruler", "ner"),
     )
 
-def load_spacy_tagger(language: str) -> Language:
 
+def load_spacy_tagger(language: str) -> Language:
     """Loads the spacy pipeline corresponding to the language provided.
 
     Args:
