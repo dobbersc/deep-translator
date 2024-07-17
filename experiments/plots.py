@@ -1,3 +1,4 @@
+import json
 import random
 import string
 import warnings
@@ -20,6 +21,7 @@ from experiments import LONG_FORM, PREFERRED_PLOT_EXTENSION, RESULTS_PATH
 from experiments.spacy_taggers import load_spacy_tagger
 
 PLOTS_PATH = RESULTS_PATH / "plots"
+RAW_COUNTERS_PATH = RESULTS_PATH / "raw_counters"
 MODES = Literal["word", "word_length", "sentence_length", "pos_tags", "sentence_lenth_difference"]
 
 
@@ -224,6 +226,17 @@ def savefig_(filename: str, fig: Figure) -> None:
     plt.close(fig)
 
 
+def save_raw_counter(filename: str, counter: Counter) -> None:
+    """Saves the input counter as a json file.
+
+    Args:
+        filename: Name of the json file.
+        counter: The counter to be saved.
+    """
+    with open(RAW_COUNTERS_PATH / filename, "w") as json_file:
+        json.dump(dict(counter), json_file)
+
+
 def sentence_length_difference(
     corpus: EuroparlCorpus | DataPoint | Sequence[DataPoint],
     source_language: str,
@@ -395,4 +408,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     PLOTS_PATH.mkdir(parents=True, exist_ok=True)
+    RAW_COUNTERS_PATH.mkdir(parents=True, exist_ok=True)
     main()
