@@ -3,6 +3,7 @@ import string
 import warnings
 from collections import Counter
 from collections.abc import Sequence
+from statistics import fmean
 from typing import Any, Literal, cast
 
 import matplotlib.pyplot as plt
@@ -246,13 +247,15 @@ def sentence_length_difference(
         mode="sentence_lenth_difference",
     )
 
-    items = apply_threshold(counter, threshold=threshold).items()
+    filtered_counter = apply_threshold(counter, threshold=threshold)
+    items = filtered_counter.items()
     if not items:
         empty_counter_warning("sentence_lenth_difference")
         return
     labels, values = zip(*items, strict=False)
     fig, ax = plt.subplots()
     _barplot_numerical(labels, values, ax)
+    plt.axvline(fmean(filtered_counter.elements()), color="k", linestyle="dashed")
     plt.xticks(np.arange(min(labels), max(labels) + 1, 5))
     plt.xlabel(f"Difference ({source_language}-{target_language})")
 
