@@ -59,7 +59,7 @@ def count_(
     if mode == "pos_tags":
         if tagger is not None:
             doc = tagger(sentence)
-            return Counter([token.tag_ for token in doc])
+            return Counter([token.pos_ for token in doc])
         msg = f"The tagger can't be set to None when the mode is '{mode}'"
         raise ValueError(msg)
     if mode == "sentence_lenth_difference":
