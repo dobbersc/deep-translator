@@ -35,6 +35,12 @@ dependencies = [
 "Repository" = "https://github.com/dobbersc/deep-translator"
 
 [project.optional-dependencies]
+experiments= [
+    "spacy~=3.7.0",
+    "en_core_web_sm@https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl",
+    "de_core_news_sm@https://github.com/explosion/spacy-models/releases/download/de_core_news_sm-3.7.0/de_core_news_sm-3.7.0-py3-none-any.whl",
+    "matplotlib~=3.9.0"
+]
 dev = [
     "black~=24.4.0",
     "mypy~=1.10.0",
