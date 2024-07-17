@@ -1,5 +1,6 @@
 import random
 import string
+import warnings
 from collections import Counter
 from collections.abc import Sequence
 from typing import Any, Literal, cast
@@ -100,9 +101,9 @@ def _fill_counters(
             counters.update(
                 count_(
                     mode=mode,
-                    sentence=data_point.source_sentence,
+                    sentence=data_point.source,
                     language=source_language,
-                    second_sentence=data_point.target_sentence,
+                    second_sentence=data_point.target,
                     second_language=target_language,
                 ),
             )
@@ -112,7 +113,7 @@ def _fill_counters(
             counters[source_language].update(
                 count_(
                     mode=mode,
-                    sentence=data_point.source_sentence,
+                    sentence=data_point.source,
                     language=source_language,
                     tagger=tagger_source,
                 ),
@@ -120,7 +121,7 @@ def _fill_counters(
             counters[target_language].update(
                 count_(
                     mode=mode,
-                    sentence=data_point.target_sentence,
+                    sentence=data_point.target,
                     language=target_language,
                     tagger=tagger_target,
                 ),
@@ -197,6 +198,20 @@ def set_fig_title(fig: Figure, title: str, source_language: str, target_language
     fig.suptitle(f"{title} in {corpus_name}")
 
 
+def empty_counter_warning(mode: str) -> None:
+    """Creates a warning for the specified mode that a counter is empty.
+
+    Args:
+        mode: The mode for which the warning is created.
+    """
+    warning = (
+        f"Mode: {mode}: A counter seems to be empty. "
+        "Perhaps a threshold value is set too high. "
+        f"The creation of the {mode} plot is ommited."
+    )
+    warnings.warn(warning, stacklevel=2)
+
+
 def savefig_(filename: str, fig: Figure) -> None:
     """Saves the plot under the specified file name and closes the figure.
 
@@ -231,9 +246,12 @@ def sentence_length_difference(
         mode="sentence_lenth_difference",
     )
 
-    fig, ax = plt.subplots()
     items = apply_threshold(counter, threshold=threshold).items()
+    if not items:
+        empty_counter_warning("sentence_lenth_difference")
+        return
     labels, values = zip(*items, strict=False)
+    fig, ax = plt.subplots()
     _barplot_numerical(labels, values, ax)
     plt.xticks(np.arange(min(labels), max(labels) + 1, 5))
     plt.xlabel(f"Difference ({source_language}-{target_language})")
@@ -312,6 +330,10 @@ def length_(
     max_value = -1
     for i, language in enumerate([source_language, target_language]):
         items = apply_threshold(counters[language], threshold=threshold).items()
+        if not items:
+            empty_counter_warning(f"{mode}_length")
+            plt.close(fig)
+            return
         labels, values = zip(*items, strict=False)
         ax = fig.get_axes()[i]
         _barplot_numerical(labels, values, ax, title=f"{LONG_FORM[language]}")
