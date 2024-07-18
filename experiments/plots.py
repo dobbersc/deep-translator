@@ -269,7 +269,9 @@ def sentence_length_difference(
     fig, ax = plt.subplots()
     _barplot_numerical(labels, values, ax)
     plt.axvline(fmean(filtered_counter.elements()), color="k", linestyle="dashed")
-    plt.xticks(np.arange(min(labels), max(labels) + 1, 5))
+    abs_max = max(abs(max(labels)), abs(min(labels)))
+    limit = abs_max - abs_max % 5
+    plt.xticks(np.arange(-limit, limit + 1, 5))
     plt.xlabel(f"Difference ({source_language}-{target_language})")
 
     set_fig_title(fig, "Sentence length difference distribution", source_language, target_language)
