@@ -20,8 +20,8 @@ class Encoder(Module):
         """Initializes the Encoder with an embedding layer and an LSTM.
 
         Args:
-            vocabulary_size: The size of the vocabulary.
-            embedding_size: The size of the embeddings.
+            vocabulary_size: The size of the source vocabulary.
+            embedding_size: The size of the source embeddings.
             hidden_size: The size of the LSTM hidden state.
             pretrained_embeddings: Optional pretrained embeddings to initialize the embedding layer.
             freeze_pretrained_embeddings: If True, freezes the pretrained embeddings.
