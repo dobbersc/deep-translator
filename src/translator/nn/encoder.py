@@ -32,10 +32,6 @@ class Encoder(Module):
         super().__init__()
 
         self.padding_index = padding_index
-        if padding_index is not None and padding_index < 0:
-            msg: str = f"{type(self).__name__} does not support negative padding indices."
-            raise ValueError(msg)
-
         self.embedding: torch.nn.Embedding = build_embedding_layer(
             vocabulary_size,
             embedding_size,
