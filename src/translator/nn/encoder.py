@@ -7,7 +7,7 @@ from translator.nn.module import Module
 from translator.nn.utils import build_embedding_layer
 
 
-class Encoder(Module):
+class RNNEncoder(Module):
     def __init__(
         self,
         vocabulary_size: int,
