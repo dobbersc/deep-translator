@@ -14,6 +14,7 @@ from torch.utils.data import DataLoader, Dataset
 
 import translator
 from translator.language import Language
+from translator.preprocessing import Tokenizer
 from translator.utils.download import download_from_url
 
 
@@ -77,8 +78,10 @@ class VectorizedDataPointBatch(Sequence[VectorizedDataPoint]):
 class VectorizedParallelDataset(Dataset[VectorizedDataPoint], Sized):
     def __init__(
         self,
-        source_sentences: Sequence[Sequence[str]],
-        target_sentences: Sequence[Sequence[str]],
+        source_sentences: Sequence[str],
+        target_sentences: Sequence[str],
+        source_tokenizer: Tokenizer,
+        target_tokenizer: Tokenizer,
         source_language: Language,
         target_language: Language,
     ) -> None:
@@ -88,13 +91,19 @@ class VectorizedParallelDataset(Dataset[VectorizedDataPoint], Sized):
 
         self.source_sentences = source_sentences
         self.target_sentences = target_sentences
+
+        self.source_tokenizer = source_tokenizer
+        self.target_tokenizer = target_tokenizer
+
         self.source_language = source_language
         self.target_language = target_language
 
     def __getitem__(self, index: int) -> VectorizedDataPoint:
+        source: str = self.source_sentences[index]
+        target: str = self.target_sentences[index]
         return VectorizedDataPoint(
-            torch.tensor(self.source_language.encode(self.source_sentences[index]), dtype=torch.long),
-            torch.tensor(self.target_language.encode(self.target_sentences[index]), dtype=torch.long),
+            source=torch.tensor(self.source_language.encode(self.source_tokenizer(source)), dtype=torch.long),
+            target=torch.tensor(self.target_language.encode(self.target_tokenizer(target)), dtype=torch.long),
         )
 
     def __len__(self) -> int:
