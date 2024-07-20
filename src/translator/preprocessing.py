@@ -1,6 +1,6 @@
 import functools
 import unicodedata
-from collections.abc import Iterator
+from collections.abc import Sequence
 from typing import Final, Literal, Protocol
 
 import regex
@@ -21,7 +21,7 @@ class Tokenizer(Protocol):
     This may include pre-processing steps, e.g. Unicode normalization, lowercasing or verbalization of tokens.
     """
 
-    def __call__(self, text: str) -> Iterator[str]:
+    def __call__(self, text: str) -> Sequence[str]:
         ...
 
 
