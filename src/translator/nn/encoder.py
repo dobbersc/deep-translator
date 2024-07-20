@@ -4,6 +4,7 @@ from torch import Tensor
 from torch.nn.utils import rnn
 
 from translator.nn.module import Module
+from translator.nn.utils import build_embedding_layer
 
 
 class Encoder(Module):
@@ -35,26 +36,13 @@ class Encoder(Module):
             msg: str = f"{type(self).__name__} does not support negative padding indices."
             raise ValueError(msg)
 
-        self.embedding: torch.nn.Embedding
-        if pretrained_embeddings is None:
-            self.embedding = torch.nn.Embedding(vocabulary_size, embedding_size, padding_idx=padding_index)
-        else:
-            if isinstance(pretrained_embeddings, KeyedVectors):
-                pretrained_embeddings = torch.tensor(pretrained_embeddings.vectors, dtype=torch.float)
-
-            self.embedding = torch.nn.Embedding.from_pretrained(
-                pretrained_embeddings,
-                freeze=freeze_pretrained_embeddings,
-                padding_idx=padding_index,
-            )
-
-            if embedding_size != self.embedding.embedding_dim:
-                msg = (
-                    f"Embedding size mismatch of pretrained embeddings: "
-                    f"expected {embedding_size!r}, but got {self.embedding.embedding_dim!r}."
-                )
-                raise ValueError(msg)
-
+        self.embedding: torch.nn.Embedding = build_embedding_layer(
+            vocabulary_size,
+            embedding_size,
+            pretrained_embeddings=pretrained_embeddings,
+            freeze_pretrained_embeddings=freeze_pretrained_embeddings,
+            padding_index=padding_index,
+        )
         self.lstm: torch.nn.LSTM = torch.nn.LSTM(embedding_size, hidden_size)
 
     def _infer_sequence_length(self, sources: Tensor) -> Tensor:
