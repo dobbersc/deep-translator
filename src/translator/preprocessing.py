@@ -26,10 +26,11 @@ class Tokenizer(Protocol):
 
 
 @functools.cache
-def load_moses_tokenizer(language: str) -> MosesTokenizer:
+def _load_moses_tokenizer(language: str) -> MosesTokenizer:
     return MosesTokenizer(language)
 
 
+# TODO: Refactor tokenizers to a class structure to better integrate the parameters for subword tokenization
 def preprocess(
     text: str,
     *,
@@ -66,7 +67,7 @@ def preprocess(
 
     tokens: list[str]
     if segmentation_level == "word":
-        tokenizer: MosesTokenizer = load_moses_tokenizer(language)
+        tokenizer: MosesTokenizer = _load_moses_tokenizer(language)
         tokens = tokenizer.tokenize(text)
     elif segmentation_level == "subword":
         raise NotImplementedError
