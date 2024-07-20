@@ -1,7 +1,7 @@
 import functools
 import unicodedata
 from collections.abc import Sequence
-from typing import Final, Literal, Protocol
+from typing import Final, Literal, Protocol, runtime_checkable
 
 import regex
 from sacremoses import MosesTokenizer
@@ -14,6 +14,7 @@ def remove_problem_characters(text: str) -> str:
     return __PROBLEM_CHARACTERS_PATTERN.sub("", text)
 
 
+@runtime_checkable
 class Tokenizer(Protocol):
     """Protocol for tokenizer functions.
 
