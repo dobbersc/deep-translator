@@ -7,7 +7,7 @@ from translator.nn.module import Module
 from translator.nn.utils import build_embedding_layer
 
 
-class LSTMEncoder(Module):
+class EncoderLSTM(Module):
     def __init__(
         self,
         vocabulary_size: int,
@@ -16,7 +16,10 @@ class LSTMEncoder(Module):
         *,
         pretrained_embeddings: KeyedVectors | Tensor | None = None,
         freeze_pretrained_embeddings: bool = True,
+        embedding_dropout: float = 0,
+        dropout: float = 0,
         padding_index: int | None = None,
+        start_index: int = 1,
     ) -> None:
         """Initializes the Encoder with an embedding layer and an LSTM.
 
@@ -26,12 +29,15 @@ class LSTMEncoder(Module):
             hidden_size: The size of the LSTM hidden state.
             pretrained_embeddings: Optional pretrained embeddings to initialize the embedding layer.
             freeze_pretrained_embeddings: If True, freezes the pretrained embeddings.
+            embedding_dropout: If non-zero, introduces a dropout layer on the outputs of the embedding layer,
+                with dropout probability equal to `embedding_dropout`.
+            dropout: If non-zero, introduces dropout to the LSTM, with dropout probability equal to `dropout`.
             padding_index: An optional index for the padding token.
                 If specified, the padding entries do not contribute to the gradient.
+            start_index: The index of the special token that marks the source's start.
         """
         super().__init__()
 
-        self.padding_index = padding_index
         self.embedding: torch.nn.Embedding = build_embedding_layer(
             vocabulary_size,
             embedding_size,
@@ -39,7 +45,15 @@ class LSTMEncoder(Module):
             freeze_pretrained_embeddings=freeze_pretrained_embeddings,
             padding_index=padding_index,
         )
-        self.lstm: torch.nn.LSTM = torch.nn.LSTM(embedding_size, hidden_size)
+        self.dropout: torch.nn.Dropout = torch.nn.Dropout(embedding_dropout)
+        self.lstm: torch.nn.LSTM = torch.nn.LSTM(embedding_size, hidden_size, dropout=dropout, batch_first=True)
+
+        self.padding_index = padding_index
+        self.start_index = start_index
+
+    def _make_encoder_input_sources(self, sources: Tensor) -> Tensor:
+        start_tokens: Tensor = torch.full(size=(sources.size(dim=0), 1), fill_value=self.start_index)
+        return torch.cat((start_tokens, sources), dim=1)
 
     def _infer_sequence_length(self, sources: Tensor) -> Tensor:
         """Infers the sequence lengths of a sources tensor using the padding index.
@@ -75,10 +89,17 @@ class LSTMEncoder(Module):
             the last (hidden, cell) state of the LSTM (each of shape: [1 x batch_size x hidden_size]).
 
         """
-        if source_sequence_lengths is None:
-            source_sequence_lengths = self._infer_sequence_length(sources)
+        sources = self._make_encoder_input_sources(sources)
+        source_sequence_lengths = (
+            self._infer_sequence_length(sources)
+            if source_sequence_lengths is None
+            else source_sequence_lengths + 1  # +1 for the start special token
+        )
 
-        embedded: Tensor = self.embedding(sources)  # Shape: [batch_size, max(source_sequence_lengths), embedding_size]
+        # Shape: [batch_size, max(source_sequence_lengths), embedding_size]
+        embedded: Tensor = self.embedding(sources)
+        embedded = self.dropout(embedded)
+
         packed_input: rnn.PackedSequence = rnn.pack_padded_sequence(
             embedded,
             source_sequence_lengths,
