@@ -52,6 +52,14 @@ class EncoderLSTM(Module):
         self.start_index = start_index
 
     def _make_encoder_input_sources(self, sources: Tensor) -> Tensor:
+        """Encodes the provided sources as input for the encoder by prepending each source with the start special token.
+
+        Args:
+            sources: A tensor of token indices. Shape: [batch_size, max(source_sequence_lengths)].
+
+        Returns:
+            The encoded sources. Shape: [batch_size, max(source_sequence_lengths)].
+        """
         start_tokens: Tensor = torch.full(
             size=(sources.size(dim=0), 1),
             fill_value=self.start_index,
