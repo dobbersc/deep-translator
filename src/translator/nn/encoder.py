@@ -70,12 +70,12 @@ class EncoderLSTM(Module):
             sources: A tensor of token indices. Shape: [batch_size, max(source_sequence_lengths)].
 
         Returns:
-            The source's sequence lengths. Shape: [batch_size].
+            The source's sequence lengths as tensor on the CPU. Shape: [batch_size].
         """
         batch_size, max_sequence_length = sources.size()
         if self.padding_index is None:
-            return torch.full(size=(batch_size,), fill_value=max_sequence_length)
-        return max_sequence_length - sources.eq(self.padding_index).sum(dim=1)
+            return torch.full(size=(batch_size,), fill_value=max_sequence_length, dtype=torch.long, device="cpu")
+        return max_sequence_length - sources.eq(self.padding_index).sum(dim=1).long().cpu()
 
     def forward(
         self,
@@ -87,7 +87,8 @@ class EncoderLSTM(Module):
         Args:
             sources: A tensor of token indices. Shape: [batch_size, max(source_sequence_lengths)].
             source_sequence_lengths: An optional tensor of sequence lengths corresponding to the provided sources.
-                If None, the sequence lengths will be inferred using the padding index. Shape: [batch_size].
+                If None, the sequence lengths will be inferred using the padding index.
+                Must be a CPU tensor of type `torch.long`. Shape: [batch_size].
 
         Returns:
             The encoder's LSTM hidden states (of shape: [batch_size x max(source_sequence_lengths) x hidden_size]) and
