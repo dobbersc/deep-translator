@@ -52,7 +52,12 @@ class EncoderLSTM(Module):
         self.start_index = start_index
 
     def _make_encoder_input_sources(self, sources: Tensor) -> Tensor:
-        start_tokens: Tensor = torch.full(size=(sources.size(dim=0), 1), fill_value=self.start_index)
+        start_tokens: Tensor = torch.full(
+            size=(sources.size(dim=0), 1),
+            fill_value=self.start_index,
+            dtype=sources.dtype,
+            device=sources.device,
+        )
         return torch.cat((start_tokens, sources), dim=1)
 
     def _infer_sequence_length(self, sources: Tensor) -> Tensor:
