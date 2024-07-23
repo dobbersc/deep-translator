@@ -99,8 +99,8 @@ class EncoderLSTM(Module):
                 Must be a CPU tensor of type `torch.long`. Shape: [batch_size].
 
         Returns:
-            The encoder's LSTM hidden states (of shape: [batch_size x max(source_sequence_lengths) x hidden_size]) and
-            the last (hidden, cell) state of the LSTM (each of shape: [1 x batch_size x hidden_size]).
+            The encoder's LSTM hidden states (of shape: [batch_size, max(source_sequence_lengths), hidden_size]) and
+            the last (hidden, cell) state of the LSTM (each of shape: [1, batch_size, hidden_size]).
 
         """
         sources = self._make_encoder_input_sources(sources)
