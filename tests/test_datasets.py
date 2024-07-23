@@ -16,17 +16,19 @@ from translator.language import Language
 
 @pytest.fixture()
 def vectorized_dataset() -> VectorizedParallelDataset:
-    source_sentences: list[list[str]] = [
-        "Dies ist ein Beispielsatz .".split(),
-        "Dies ist ein weiterer Beispielsatz .".split(),
+    source_sentences: list[str] = [
+        "Dies ist ein Beispielsatz .",
+        "Dies ist ein weiterer Beispielsatz .",
     ]
-    target_sentences: list[list[str]] = [
-        "This is an example sentence .".split(),
-        "This is another example sentence .".split(),
+    target_sentences: list[str] = [
+        "This is an example sentence .",
+        "This is another example sentence .",
     ]
     return VectorizedParallelDataset(
         source_sentences=source_sentences,
         target_sentences=target_sentences,
+        source_tokenizer=lambda x: x.split(),
+        target_tokenizer=lambda x: x.split(),
         source_language=Language.from_sentences("de", source_sentences),
         target_language=Language.from_sentences("en", target_sentences),
     )
@@ -41,8 +43,10 @@ class TestVectorizedParallelDataset:
     def test_invalid_source_and_target_sentences(self) -> None:
         with pytest.raises(ValueError, match="requires the same number of source and target sentences."):
             VectorizedParallelDataset(
-                source_sentences=["Satz 1".split(), "Satz 2".split()],
-                target_sentences=["Sentence 1".split(), "Sentence 2".split(), "Sentence 3".split()],
+                source_sentences=["Satz 1", "Satz 2"],
+                target_sentences=["Sentence 1", "Sentence 2", "Sentence 3"],
+                source_tokenizer=lambda x: x.split(),
+                target_tokenizer=lambda x: x.split(),
                 source_language=Language.from_sentences("de", []),
                 target_language=Language.from_sentences("en", []),
             )
