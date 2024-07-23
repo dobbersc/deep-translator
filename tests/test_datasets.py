@@ -29,16 +29,16 @@ def vectorized_dataset() -> VectorizedParallelDataset:
         target_sentences=target_sentences,
         source_tokenizer=lambda x: x.split(),
         target_tokenizer=lambda x: x.split(),
-        source_language=Language.from_sentences("de", source_sentences),
-        target_language=Language.from_sentences("en", target_sentences),
+        source_language=Language.from_sentences("de", map(str.split, source_sentences)),
+        target_language=Language.from_sentences("en", map(str.split, target_sentences)),
     )
 
 
 class TestVectorizedParallelDataset:
     def test_valid_dataset(self, vectorized_dataset: VectorizedParallelDataset) -> None:
         assert len(vectorized_dataset) == 2
-        assert (vectorized_dataset[0].source == torch.tensor((5, 6, 7, 8, 9), dtype=torch.float)).all()
-        assert (vectorized_dataset[0].target == torch.tensor((5, 6, 7, 8, 9, 10), dtype=torch.float)).all()
+        assert (vectorized_dataset[0].source == torch.tensor((5, 6, 7, 8, 9), dtype=torch.long)).all()
+        assert (vectorized_dataset[0].target == torch.tensor((5, 6, 7, 8, 9, 10), dtype=torch.long)).all()
 
     def test_invalid_source_and_target_sentences(self) -> None:
         with pytest.raises(ValueError, match="requires the same number of source and target sentences."):
