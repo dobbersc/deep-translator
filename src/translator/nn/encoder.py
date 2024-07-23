@@ -68,7 +68,7 @@ class EncoderLSTM(Module):
         )
         return torch.cat((start_tokens, sources), dim=1)
 
-    def _infer_sequence_length(self, sources: Tensor) -> Tensor:
+    def _infer_sequence_lengths(self, sources: Tensor) -> Tensor:
         """Infers the sequence lengths of a sources tensor using the padding index.
 
         If the encoder does not define a padding index,
@@ -83,7 +83,8 @@ class EncoderLSTM(Module):
         batch_size, max_sequence_length = sources.size()
         if self.padding_index is None:
             return torch.full(size=(batch_size,), fill_value=max_sequence_length, dtype=torch.long, device="cpu")
-        return max_sequence_length - sources.eq(self.padding_index).sum(dim=1).long().cpu()
+        sequence_lengths: Tensor = max_sequence_length - sources.eq(self.padding_index).sum(dim=1).long().cpu()
+        return sequence_lengths
 
     def forward(
         self,
@@ -105,12 +106,12 @@ class EncoderLSTM(Module):
         """
         sources = self._make_encoder_input_sources(sources)
         source_sequence_lengths = (
-            self._infer_sequence_length(sources)
+            self._infer_sequence_lengths(sources)
             if source_sequence_lengths is None
             else source_sequence_lengths + 1  # +1 for the start special token
         )
 
-        # Shape: [batch_size, max(source_sequence_lengths), embedding_size]
+        # Shape: [batch_size, max(source_sequence_lengths), embedding_size].
         embedded: Tensor = self.embedding(sources)
         embedded = self.dropout(embedded)
 

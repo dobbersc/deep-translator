@@ -8,6 +8,7 @@ from torch import Tensor
 def build_embedding_layer(
     num_embeddings: int,
     embedding_size: int,
+    *,
     pretrained_embeddings: KeyedVectors | Tensor | None = None,
     freeze_pretrained_embeddings: bool = True,
     padding_index: int | None = None,

@@ -1,9 +1,10 @@
 import random
-from typing import Literal, Any
+from typing import Any, Literal
 
 import torch
 from gensim.models import KeyedVectors
 from torch import Tensor
+
 from translator.nn.module import Module
 from translator.nn.utils import build_embedding_layer
 
@@ -58,8 +59,7 @@ class DecoderLSTM(Module):
         self.stop_index = stop_index
 
     def _make_decoder_input_sequences(self, targets: Tensor) -> Tensor:
-        """Encodes the provided targets as input for the decoder
-        by prepending each target with the seperator special token.
+        """Encodes the provided targets as input for the decoder by prepending each with the seperator special token.
 
         Args:
             targets: A tensor of token indices. Shape: [batch_size, max(target_sequence_lengths)].
@@ -79,7 +79,7 @@ class DecoderLSTM(Module):
         self,
         decoder_input: Tensor,
         hidden_and_cell: tuple[Tensor, Tensor] | None = None,
-        encoder_hidden_states: Tensor | None = None,
+        encoder_hidden_states: Tensor | None = None,  # noqa: ARG002
     ) -> tuple[Tensor, tuple[Tensor, Tensor], Tensor | None]:
         """Performs a single decoding step through the decoder.
 
@@ -98,7 +98,7 @@ class DecoderLSTM(Module):
         # Reshape the decoder inputs to tensors of sequence length 1 for the LSTM. Shape: [batch_size, 1].
         decoder_input = decoder_input.unsqueeze(dim=1)
 
-        # Shape: [batch_size, 1, embedding_size]
+        # Shape: [batch_size, 1, embedding_size].
         embedded: Tensor = self.embedding(decoder_input)
         embedded = self.dropout(embedded)
 
@@ -161,7 +161,7 @@ class DecoderLSTM(Module):
             # TODO: Check if detaching the decoder outputs is useful:
             #   https://pytorch.org/tutorials/intermediate/seq2seq_translation_tutorial.html
             effective_decoder_input: Tensor = (
-                decoder_input if use_teacher_forcing else decoder_output.argmax(dim=1).detach()
+                decoder_input if use_teacher_forcing else decoder_output.argmax(dim=1).detach()  # type: ignore[union-attr]
             )
 
             decoder_output, decoder_hidden_and_cell, _ = self.step(
@@ -213,4 +213,4 @@ class DecoderLSTM(Module):
             return self.decode_sampled(encoder_hidden_states, encoder_hidden_and_cell, **kwargs)
         if method == "beam-search":
             return self.decode_beam_search(encoder_hidden_states, encoder_hidden_and_cell, **kwargs)
-        raise ValueError()
+        raise ValueError
