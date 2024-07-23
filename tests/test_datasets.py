@@ -25,8 +25,8 @@ def vectorized_dataset() -> VectorizedParallelDataset:
         "This is another example sentence .",
     ]
     return VectorizedParallelDataset(
-        source_sentences=source_sentences,
-        target_sentences=target_sentences,
+        sources=source_sentences,
+        targets=target_sentences,
         source_tokenizer=lambda x: x.split(),
         target_tokenizer=lambda x: x.split(),
         source_language=Language.from_sentences("de", map(str.split, source_sentences)),
@@ -43,8 +43,8 @@ class TestVectorizedParallelDataset:
     def test_invalid_source_and_target_sentences(self) -> None:
         with pytest.raises(ValueError, match="requires the same number of source and target sentences."):
             VectorizedParallelDataset(
-                source_sentences=["Satz 1", "Satz 2"],
-                target_sentences=["Sentence 1", "Sentence 2", "Sentence 3"],
+                sources=["Satz 1", "Satz 2"],
+                targets=["Sentence 1", "Sentence 2", "Sentence 3"],
                 source_tokenizer=lambda x: x.split(),
                 target_tokenizer=lambda x: x.split(),
                 source_language=Language.from_sentences("de", []),

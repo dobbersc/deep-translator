@@ -78,19 +78,19 @@ class VectorizedDataPointBatch(Sequence[VectorizedDataPoint]):
 class VectorizedParallelDataset(Dataset[VectorizedDataPoint], Sized):
     def __init__(
         self,
-        source_sentences: Sequence[str],
-        target_sentences: Sequence[str],
+        sources: Sequence[str],
+        targets: Sequence[str],
         source_tokenizer: Tokenizer,
         target_tokenizer: Tokenizer,
         source_language: Language,
         target_language: Language,
     ) -> None:
-        if len(source_sentences) != len(target_sentences):
+        if len(sources) != len(targets):
             msg: str = f"The {type(self).__name__} requires the same number of source and target sentences."
             raise ValueError(msg)
 
-        self.source_sentences = source_sentences
-        self.target_sentences = target_sentences
+        self.sources = sources
+        self.targets = targets
 
         self.source_tokenizer = source_tokenizer
         self.target_tokenizer = target_tokenizer
@@ -99,15 +99,15 @@ class VectorizedParallelDataset(Dataset[VectorizedDataPoint], Sized):
         self.target_language = target_language
 
     def __getitem__(self, index: int) -> VectorizedDataPoint:
-        source: str = self.source_sentences[index]
-        target: str = self.target_sentences[index]
+        source: str = self.sources[index]
+        target: str = self.targets[index]
         return VectorizedDataPoint(
             source=torch.tensor(self.source_language.encode(self.source_tokenizer(source)), dtype=torch.long),
             target=torch.tensor(self.target_language.encode(self.target_tokenizer(target)), dtype=torch.long),
         )
 
     def __len__(self) -> int:
-        return len(self.source_sentences)
+        return len(self.sources)
 
 
 class ParallelDataLoader(DataLoader[VectorizedDataPoint]):
