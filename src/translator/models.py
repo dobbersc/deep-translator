@@ -12,9 +12,6 @@ from translator.tokenizers import Tokenizer, Detokenizer
 
 
 class Translator(Seq2Seq):
-    # Implement searches and complete pipeline here.
-    # This should be the easy-to-use entry point
-
     def __init__(
         self,
         *,
@@ -75,7 +72,8 @@ class Translator(Seq2Seq):
         data_points: Iterable[VectorizedDataPointBatch],
         criterion: Callable[[Tensor, Tensor], Tensor] | None = None,
     ) -> tuple[float, float]:
-        self.eval()
+        # TODO: Support Iterable[DataPoint] and Iterable[VectorizedDataPoint]
+        self.eval()  # Bring the model into evaluation mode.
 
         padding_index: int = -100 if self.decoder.padding_index is None else self.decoder.padding_index
         if criterion is None:
@@ -83,23 +81,22 @@ class Translator(Seq2Seq):
 
         nll_criterion: torch.nn.NLLLoss = torch.nn.NLLLoss(ignore_index=padding_index)
 
-        # Keep track of running loss
+        # Keep track of running loss.
         validation_loss: float = 0
         validation_nll_loss: float = 0
 
         num_batches: int = 0
         for data_point_batch in tqdm(data_points, desc="Evaluating Model", unit="batch", leave=False):
-            # Move data to the model's device
+            # Move data to the model's device.
             sources: Tensor = data_point_batch.sources.to(self.device)
             targets: Tensor = data_point_batch.targets.to(self.device)
-            ground_truth: Tensor = self.decoder.make_ground_truth_sequences(targets).flatten()
 
-            # Evaluate the model with teacher forcing disabled
-            # Using the model, compute the log probabilities and loss
-            predicted_log_probabilities: Tensor = self(sources, targets, teacher_forcing_ratio=0)
+            # With teacher forcing disabled, compute the log probabilities for each token in the target sequences.
+            predicted_log_probabilities: Tensor = self(sources, targets, teacher_forcing_ratio=0).flatten(end_dim=1)
+            ground_truth_targets: Tensor = self.decoder.make_ground_truth_sequences(targets).flatten()
 
-            loss: Tensor = criterion(predicted_log_probabilities.flatten(end_dim=1), ground_truth)
-            nll_loss: Tensor = nll_criterion(predicted_log_probabilities.flatten(end_dim=1), ground_truth)
+            loss: Tensor = criterion(predicted_log_probabilities, ground_truth_targets)
+            nll_loss: Tensor = nll_criterion(predicted_log_probabilities, ground_truth_targets)
 
             validation_loss += loss.item()
             validation_nll_loss += nll_loss.item()

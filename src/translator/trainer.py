@@ -65,7 +65,7 @@ class ModelTrainer:
         train_data_loader = ParallelDataLoader(
             train_dataset,
             batch_size=batch_size,
-            shuffle=True,  # Shuffle the training data to reduce overfitting to the data point order
+            shuffle=True,  # Shuffle the training data to reduce overfitting to the data point order.
             num_workers=num_workers,
         )
         dev_data_loader = ParallelDataLoader(dev_dataset, batch_size=batch_size, num_workers=num_workers)
@@ -129,34 +129,32 @@ class ModelTrainer:
         Returns:
             The loss of the model on the training dataset after this epoch.
         """
-        self.model.train()  # Bring the model into training mode
+        self.model.train()  # Bring the model into training mode.
 
         train_loss: float = 0.0
         start_time: float = time.time()
 
-        # Traverse each batch of data points
         data_point_batch: VectorizedDataPointBatch
         for batch_index, data_point_batch in enumerate(data_loader, start=1):
-            # Move data to the model's device
+            # Move data to the model's device.
             sources: Tensor = data_point_batch.sources.to(self.model.device)
             targets: Tensor = data_point_batch.targets.to(self.model.device)
 
-            # Zero parameter gradients
+            # Zero parameter gradients.
             optimizer.zero_grad()
 
-            # Using the model, compute the log probabilities for each token in the target sequences
+            # Using the model, compute the log probabilities for each token in the target sequences.
             predicted_log_probabilities: Tensor = self.model(sources, targets, teacher_forcing_ratio)
-
-            # Compute the loss and update the model parameters via backpropagation
             ground_truth_targets: Tensor = self.model.decoder.make_ground_truth_sequences(targets)
+
+            # Compute the loss and update the model parameters via backpropagation.
             loss: Tensor = criterion(predicted_log_probabilities.flatten(end_dim=1), ground_truth_targets.flatten())
+            train_loss += loss.item()
 
             loss.backward()
             optimizer.step()
 
-            train_loss += loss.item()
-
-            # Log intermediate results
+            # Log intermediate results.
             if batch_index % max(1, len(data_loader) // 10) == 0:
                 msg: str = (
                     f"batch {batch_index}/{len(data_loader)}"
@@ -180,7 +178,7 @@ class ModelTrainer:
         evaluate_on_train: bool = False,
         num_workers: int = 0,
     ) -> float:
-        # Create torch datasets and data loaders for each dataset split
+        # Create torch datasets and data loaders for each dataset split.
         train_dataset, dev_dataset, test_dataset = self._create_vectorized_datasets()
         train_data_loader, dev_data_loader, test_data_loader = self._create_data_loaders(
             train_dataset,
@@ -213,7 +211,7 @@ class ModelTrainer:
         early_stopping_counter: int = 0
 
         try:
-            # Loop over the dataset multiple times; one time is one epoch
+            # Loop over the dataset multiple times; one time is one epoch.
             for epoch in range(1, max_epochs + 1):
                 logger.info(LOG_SEPARATOR)
                 logger.info("EPOCH %d", epoch)
@@ -237,7 +235,7 @@ class ModelTrainer:
                     logger.info("TRAIN Perplexity: %.4f", train_perplexity)
                 logger.info("DEV   Perplexity: %.4f", dev_perplexity)
 
-                # After validation phase, perform learning rate scheduler update step
+                # After validation phase, perform learning rate scheduler update step.
                 scheduler.step(dev_loss)
 
                 # Implementation of early stopping: If the model's perplexity on the dev set does not improve
