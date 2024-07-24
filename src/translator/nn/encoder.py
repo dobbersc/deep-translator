@@ -51,14 +51,14 @@ class EncoderLSTM(Module):
         self.padding_index = padding_index
         self.start_index = start_index
 
-    def _make_encoder_input_sources(self, sources: Tensor) -> Tensor:
-        """Encodes the provided sources as input for the encoder by prepending each source with the start special token.
+    def make_input_sources(self, sources: Tensor) -> Tensor:
+        """Encodes the sources as input for the encoder by prepending each source with the start special token.
 
         Args:
             sources: A tensor of token indices. Shape: [batch_size, max(source_sequence_lengths)].
 
         Returns:
-            The encoded sources. Shape: [batch_size, max(source_sequence_lengths)].
+            The encoded sources. Shape: [batch_size, max(source_sequence_lengths) + 1].
         """
         start_tokens: Tensor = torch.full(
             size=(sources.size(dim=0), 1),
@@ -104,7 +104,7 @@ class EncoderLSTM(Module):
             the last (hidden, cell) state of the LSTM (each of shape: [1, batch_size, hidden_size]).
 
         """
-        sources = self._make_encoder_input_sources(sources)
+        sources = self.make_input_sources(sources)
         source_sequence_lengths = (
             self._infer_sequence_lengths(sources)
             if source_sequence_lengths is None
