@@ -159,7 +159,7 @@ class DecoderLSTM(Module):
         (batch_size, target_sequence_length), target_vocabulary_size = targets.shape, self.embedding.num_embeddings
         prediction_log_probabilities: Tensor = torch.empty(
             (target_sequence_length, batch_size, target_vocabulary_size),
-            dtype=targets.dtype,
+            dtype=torch.float,
             device=self.device,
         )
 
