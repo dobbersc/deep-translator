@@ -78,16 +78,17 @@ class Translator(Seq2Seq):
 
     @torch.no_grad()
     def evaluate(
-            self,
-            data_points: Iterable[VectorizedDataPointBatch],
-            criterion: Callable[[Tensor, Tensor], Tensor] | None = None,
+        self,
+        data_points: Iterable[VectorizedDataPointBatch],
+        criterion: Callable[[Tensor, Tensor], Tensor] | None = None,
     ) -> tuple[float, float]:
         self.eval()
 
+        padding_index: int = -100 if self.decoder.padding_index is None else self.decoder.padding_index
         if criterion is None:
-            criterion = torch.nn.NLLLoss(ignore_index=self.decoder.padding_index)
+            criterion = torch.nn.NLLLoss(ignore_index=padding_index)
 
-        nll_criterion: torch.nn.NLLLoss = torch.nn.NLLLoss(ignore_index=self.decoder.padding_index)
+        nll_criterion: torch.nn.NLLLoss = torch.nn.NLLLoss(ignore_index=padding_index)
 
         # Keep track of running loss
         validation_loss: float = 0

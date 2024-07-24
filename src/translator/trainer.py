@@ -129,7 +129,6 @@ class ModelTrainer:
         Returns:
             The loss of the model on the training dataset after this epoch.
         """
-
         self.model.train()  # Bring the model into training mode
 
         train_loss: float = 0.0
@@ -193,7 +192,8 @@ class ModelTrainer:
 
         # Use negative log-likelihood (equivalent to the cross entropy after a log softmax operation)
         # as the loss function and initialize an optimizer and scheduler.
-        criterion = torch.nn.NLLLoss(ignore_index=self.model.decoder.padding_index)
+        padding_index: int = -100 if self.model.decoder.padding_index is None else self.model.decoder.padding_index
+        criterion = torch.nn.NLLLoss(ignore_index=padding_index)
         optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=scheduler_patience)
 
