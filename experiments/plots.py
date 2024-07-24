@@ -15,7 +15,7 @@ from spacy.language import Language
 from tqdm import tqdm
 
 from translator.datasets import DataPoint, EuroparlCorpus
-from translator.preprocessing import preprocess
+from translator.tokenizers import preprocess
 
 from experiments import LONG_FORM, PREFERRED_PLOT_EXTENSION, RESULTS_PATH
 from experiments.spacy_taggers import load_spacy_tagger

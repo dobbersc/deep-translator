@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader, Dataset
 
 import translator
 from translator.language import Language
-from translator.preprocessing import Tokenizer
+from translator.tokenizers import Tokenizer
 from translator.utils.download import download_from_url
 
 

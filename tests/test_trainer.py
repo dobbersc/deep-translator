@@ -6,7 +6,7 @@ import pytest
 from translator.datasets import ParallelCorpus
 from translator.language import Language
 from translator.models import Translator
-from translator.preprocessing import Tokenizer, preprocess
+from translator.tokenizers import Tokenizer, preprocess
 from translator.trainer import ModelTrainer
 from translator.utils.random import set_seed
 from translator.utils.torch import detect_device

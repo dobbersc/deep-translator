@@ -26,6 +26,16 @@ class Tokenizer(Protocol):
         ...
 
 
+class Detokenizer(Protocol):
+    """Protocol for detokenizer functions.
+
+    A detokenizer joins tokens to a string representation. This may include post-processing steps, e.g. true-casing.
+    """
+
+    def __call__(self, tokens: Sequence[str]) -> str:
+        ...
+
+
 @functools.cache
 def _load_moses_tokenizer(language: str) -> MosesTokenizer:
     return MosesTokenizer(language)

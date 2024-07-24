@@ -2,7 +2,7 @@ from typing import Literal
 
 import pytest
 
-from translator.preprocessing import preprocess
+from translator.tokenizers import preprocess
 
 
 @pytest.mark.parametrize(
