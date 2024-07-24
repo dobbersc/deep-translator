@@ -3,7 +3,6 @@ import os
 from pathlib import Path
 from typing import Final
 
-
 __all__ = ["__version__", "CACHE_DIRECTORY", "LOG_SEPARATOR"]
 
 __version__: Final[str] = "0.0.1"
