@@ -179,7 +179,7 @@ class ModelTrainer:
         teacher_forcing_ratio: float = 0.5,
         evaluate_on_train: bool = False,
         num_workers: int = 0,
-    ) -> None:
+    ) -> float:
         # Create torch datasets and data loaders for each dataset split
         train_dataset, dev_dataset, test_dataset = self._create_vectorized_datasets()
         train_data_loader, dev_data_loader, test_data_loader = self._create_data_loaders(
@@ -266,4 +266,6 @@ class ModelTrainer:
         # Now, evaluate the best model on test set.
         self.model.load_state_dict(best_model_state_dict)
         _, test_perplexity = self.model.evaluate(test_data_loader, criterion=criterion)
-        logger.info("\nTEST  Perplexity: %.4f", test_perplexity)
+        logger.info("TEST  Perplexity: %.4f", test_perplexity)
+
+        return test_perplexity
