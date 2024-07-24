@@ -6,9 +6,10 @@ from typing import Any
 
 import torch.nn
 from torch import Tensor
+
 from translator import LOG_SEPARATOR
+from translator.datasets import ParallelCorpus, ParallelDataLoader, VectorizedDataPointBatch, VectorizedParallelDataset
 from translator.models import Translator
-from translator.datasets import ParallelCorpus, VectorizedParallelDataset, VectorizedDataPointBatch, ParallelDataLoader
 
 logger: logging.Logger = logging.getLogger("translator")
 

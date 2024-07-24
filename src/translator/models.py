@@ -1,16 +1,16 @@
-from collections.abc import Sequence, Callable
-from typing import Protocol, Iterable
-
 import math
+from collections.abc import Callable, Iterable, Sequence
+from typing import Protocol
+
 import torch
 from gensim.models import KeyedVectors
 from torch import Tensor
 from tqdm import tqdm
+
+from translator.datasets import VectorizedDataPointBatch
 from translator.language import Language
 from translator.nn import DecoderLSTM, EncoderLSTM, Seq2Seq
 from translator.preprocessing import Tokenizer
-
-from datasets import VectorizedDataPointBatch
 
 
 class Detokenizer(Protocol):
