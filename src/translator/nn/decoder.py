@@ -58,14 +58,14 @@ class DecoderLSTM(Module):
         self.seperator_index = seperator_index
         self.stop_index = stop_index
 
-    def _make_decoder_input_sequences(self, targets: Tensor) -> Tensor:
-        """Encodes the provided targets as input for the decoder by prepending each with the seperator special token.
+    def make_input_sequences(self, targets: Tensor) -> Tensor:
+        """Encodes the targets as input for the decoder by prepending each with the seperator special token.
 
         Args:
             targets: A tensor of token indices. Shape: [batch_size, max(target_sequence_lengths)].
 
         Returns:
-            The encoded targets. Shape: [batch_size, max(target_sequence_lengths)].
+            The encoded targets. Shape: [batch_size, max(target_sequence_lengths) + 1].
         """
         seperator_tokens: Tensor = torch.full(
             size=(targets.size(dim=0), 1),
@@ -74,6 +74,23 @@ class DecoderLSTM(Module):
             device=targets.device,
         )
         return torch.cat((seperator_tokens, targets), dim=1)
+
+    def make_ground_truth_sequences(self, targets: Tensor) -> Tensor:
+        """Encodes the targets as ground truth output of the decoder by appending each with the stop special token.
+
+        Args:
+            targets: A tensor of token indices. Shape: [batch_size, max(target_sequence_lengths)].
+
+        Returns:
+            The encoded targets. Shape: [batch_size, max(target_sequence_lengths) + 1].
+        """
+        stop_tokens: Tensor = torch.full(
+            size=(targets.size(dim=0), 1),
+            fill_value=self.stop_index,
+            dtype=targets.dtype,
+            device=targets.device,
+        )
+        return torch.cat((targets, stop_tokens), dim=1)
 
     def step(
         self,
@@ -135,7 +152,7 @@ class DecoderLSTM(Module):
             The predicted log softmax probabilities in the target vocabulary for each token in the target sequence.
             Shape: [batch_size, max(target_sequence_lengths), target_vocabulary_size].
         """
-        targets = self._make_decoder_input_sequences(targets)
+        targets = self.make_input_sequences(targets)
 
         # Create a tensor that contains the log probabilities for each predicted token.
         # For now, the batch_size is in the second dimension!
