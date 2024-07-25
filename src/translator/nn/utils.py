@@ -19,7 +19,7 @@ def build_embedding_layer(
         embedding = torch.nn.Embedding(num_embeddings, embedding_size, padding_idx=padding_index, **kwargs)
     else:
         if isinstance(pretrained_embeddings, KeyedVectors):
-            pretrained_embeddings = torch.tensor(pretrained_embeddings.vectors, dtype=torch.float)
+            pretrained_embeddings = torch.as_tensor(pretrained_embeddings.vectors, dtype=torch.float)
 
         embedding = torch.nn.Embedding.from_pretrained(
             pretrained_embeddings,
