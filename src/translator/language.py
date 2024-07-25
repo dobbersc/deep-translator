@@ -1,6 +1,12 @@
 from collections import Counter
 from collections.abc import Iterable, Sized
-from typing import Self
+from typing import TYPE_CHECKING, Any, Self
+
+import numpy as np
+from gensim.models import KeyedVectors
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
 
 
 def _validate_token(token: str) -> None:
@@ -174,3 +180,53 @@ class Language(Sized):
             An instance of the Language.
         """
         return cls(name=name, token2idx=build_language_dictionary(sentences, unk_threshold=unk_threshold))
+
+    @classmethod
+    def from_embeddings(
+        cls,
+        name: str,
+        embeddings: KeyedVectors,
+        padding_token: str = "<PAD>",
+        start_token: str = "<START>",
+        seperator_token: str = "<SEP>",
+        stop_token: str = "<STOP>",
+        unknown_token: str = "<UNK>",
+    ) -> Self:
+        """Initializes a language from gensim embeddings.
+
+        If the embeddings do not contain the specified special tokens, they will be initialized in place as follows:
+
+        - The padding, start, separate and stop token will be sampled from a Gaussian with zero mean and unit variance.
+        - The unknown token will be initialized as the mean of all token embeddings.
+
+        Args:
+            name: The language's name.
+            embeddings: The gensim embeddings.
+            padding_token: The special token for padding sequences of unequal lengths exists.
+            start_token: The special token to mark the source's start.
+            seperator_token: The special token to separate source from target.
+            stop_token: The special token to mark the target's end.
+            unknown_token: The special token for out-of-vocabulary words.
+
+        Returns:
+            The Language corresponding to the embeddings.
+        """
+        rng: np.random.Generator = np.random.default_rng()
+        special_token_weights: NDArray[Any] = rng.normal(0, 1, size=(4, embeddings.vector_size))
+        special_token_weights = np.concatenate(
+            (special_token_weights, embeddings.vectors.mean(axis=0, keepdims=True)),
+            dtype=embeddings.vectors.dtype,
+        )
+
+        special_tokens: list[str] = [padding_token, start_token, seperator_token, stop_token, unknown_token]
+        embeddings.add_vectors(special_tokens, special_token_weights, replace=False)
+
+        return cls(
+            name=name,
+            token2idx=embeddings.key_to_index,
+            padding_token=padding_token,
+            start_token=start_token,
+            seperator_token=seperator_token,
+            stop_token=stop_token,
+            unknown_token=unknown_token,
+        )

@@ -1,4 +1,6 @@
+import numpy as np
 import pytest
+from gensim.models import KeyedVectors
 
 from translator.language import Language
 
@@ -33,6 +35,18 @@ class TestLanguage:
         )
         with pytest.raises(ValueError, match="The reserved token '<START>' .+ exists inside the provided data."):
             Language.from_sentences(name="de", sentences=sentences)
+
+    def test_from_embeddings(self) -> None:
+        embeddings: KeyedVectors = KeyedVectors(vector_size=10, count=1)
+        embeddings.add_vector("Test", np.ones(10))
+
+        language: Language = Language.from_embeddings("de", embeddings)
+
+        assert (
+            language.token2idx
+            == embeddings.key_to_index
+            == {"Test": 0, "<PAD>": 1, "<START>": 2, "<SEP>": 3, "<STOP>": 4, "<UNK>": 5}
+        )
 
     def test_invalid_special_tokens(self) -> None:
         msg: str = "The special tokens '<SEP>', '<START>', '<STOP>' are not present in the word-to-index dictionary."
