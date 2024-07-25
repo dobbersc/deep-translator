@@ -22,7 +22,7 @@ class Tokenizer(Protocol):
     This may include pre-processing steps, e.g. Unicode normalization, lowercasing or verbalization of tokens.
     """
 
-    def __call__(self, text: str) -> Sequence[str]:
+    def __call__(self, text: str, /) -> Sequence[str]:
         ...
 
 
@@ -32,7 +32,7 @@ class Detokenizer(Protocol):
     A detokenizer joins tokens to a string representation. This may include post-processing steps, e.g. true-casing.
     """
 
-    def __call__(self, tokens: Sequence[str]) -> str:
+    def __call__(self, tokens: Sequence[str], /) -> str:
         ...
 
 

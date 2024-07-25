@@ -1,14 +1,18 @@
-from collections.abc import Callable, Iterable, Sequence
-
 import math
+import warnings
+from collections.abc import Callable, Iterable, Sequence
+from pathlib import Path
+from typing import IO, Any, Self
+
 import torch
 from gensim.models import KeyedVectors
 from torch import Tensor
 from tqdm import tqdm
+
 from translator.datasets import VectorizedDataPointBatch
 from translator.language import Language
 from translator.nn import DecoderLSTM, EncoderLSTM, Seq2Seq
-from translator.tokenizers import Tokenizer, Detokenizer
+from translator.tokenizers import Detokenizer, Tokenizer
 
 
 class Translator(Seq2Seq):
@@ -19,7 +23,7 @@ class Translator(Seq2Seq):
         target_language: Language,
         source_tokenizer: Tokenizer,
         target_tokenizer: Tokenizer,
-        target_detokenizer: Detokenizer = lambda x: " ".join(x),
+        target_detokenizer: Detokenizer = " ".join,
         source_embedding_size: int = 256,
         target_embedding_size: int = 256,
         hidden_size: int = 512,
@@ -110,3 +114,75 @@ class Translator(Seq2Seq):
 
     def evaluate_bleu(self, sources: Sequence[str], targets: Sequence[str], batch_size: int = 32) -> float:
         raise NotImplementedError
+
+    def save(self, f: str | Path | IO[bytes]) -> None:
+        if self.encoder.lstm.hidden_size != self.decoder.lstm.hidden_size:
+            msg: str = "The hidden size of the encoder and decoder LSTMs must match to be serializable."
+            raise AssertionError(msg)
+
+        if self.encoder.dropout.p != self.decoder.dropout.p:
+            warnings.warn(
+                "Mismatch in embedding dropout probabilities between encoder and decoder embeddings. "
+                "Saving the model with the encoder's dropout value for both. "
+                f"Encoder dropout: {self.encoder.dropout.p!r}; "
+                f"Decoder dropout: {self.decoder.dropout.p!r}.",
+                category=RuntimeWarning,
+                stacklevel=2,
+            )
+        if self.encoder.lstm.dropout != self.decoder.lstm.dropout:
+            warnings.warn(
+                "Mismatch in LSTM dropout probabilities between encoder and decoder. "
+                "Saving the model with the encoder's LSTM dropout value for both. "
+                f"Encoder LSTM dropout: {self.encoder.lstm.dropout!r}; "
+                f"Decoder LSTM dropout: {self.decoder.lstm.dropout!r}.",
+                category=RuntimeWarning,
+                stacklevel=2,
+            )
+
+        serialized: dict[str, dict[str, Any]] = {
+            "parameters": {
+                "source_language": self.source_language,
+                "target_language": self.target_language,
+                "source_tokenizer": self.source_tokenizer,
+                "target_tokenizer": self.target_tokenizer,
+                "target_detokenizer": self.target_detokenizer,
+                "source_embedding_size": self.encoder.embedding.embedding_dim,
+                "target_embedding_size": self.decoder.embedding.embedding_dim,
+                "hidden_size": self.encoder.lstm.hidden_size,
+                "freeze_source_embeddings": not self.encoder.embedding.weight.requires_grad,
+                "freeze_target_embeddings": not self.decoder.embedding.weight.requires_grad,
+                "embedding_dropout": self.encoder.dropout.p,
+                "dropout": self.encoder.lstm.dropout,
+            },
+            "state_dict": self.state_dict(),
+        }
+
+        torch.save(serialized, f)
+
+    @classmethod
+    def load(cls, f: str | Path | IO[bytes]) -> Self:
+        serialized: dict[str, dict[str, Any]] = torch.load(f)
+
+        parameters: dict[str, Any] = serialized["parameters"]
+        translator: Self = cls(
+            source_language=parameters["source_language"],
+            target_language=parameters["target_language"],
+            source_tokenizer=parameters["source_tokenizer"],
+            target_tokenizer=parameters["target_tokenizer"],
+            target_detokenizer=parameters["target_detokenizer"],
+            source_embedding_size=parameters["source_embedding_size"],
+            target_embedding_size=parameters["target_embedding_size"],
+            hidden_size=parameters["hidden_size"],
+            embedding_dropout=parameters["embedding_dropout"],
+            dropout=parameters["dropout"],
+        )
+
+        translator.load_state_dict(serialized["state_dict"])
+
+        if parameters["freeze_source_embeddings"]:
+            translator.encoder.embedding.requires_grad_(requires_grad=False)
+        if parameters["freeze_target_embeddings"]:
+            translator.decoder.embedding.requires_grad_(requires_grad=False)
+
+        translator.eval()
+        return translator
