@@ -2,7 +2,7 @@ import math
 import warnings
 from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
-from typing import IO, Any, Self
+from typing import IO, Any, Literal, Self, cast, overload
 
 import torch
 from gensim.models import KeyedVectors
@@ -68,8 +68,82 @@ class Translator(Seq2Seq):
         self.target_tokenizer = target_tokenizer
         self.target_detokenizer = target_detokenizer
 
-    def translate(self, text: str) -> str:
-        raise NotImplementedError
+    def _truncate_predicted_targets(self, targets: Tensor) -> list[Tensor]:
+        """Truncates the predicted target sequences before the stop token.
+
+        This function processes a batch of predicted target sequences and
+        truncates each sequence  before the first occurrence of the stop token.
+        If a sequence does not contain the stop token, it remains unchanged.
+
+        Args:
+            targets: A tensor of token indices. Shape: [batch_size, sequence_length].
+
+        Returns:
+            A list of truncated target tensors, each with their individual sequence length.
+            Shape: [effective_sequence_length].
+        """
+        stop_index_mask: Tensor = targets.eq(self.decoder.stop_index).to(targets.dtype)
+        effective_sequence_lengths: Tensor = stop_index_mask.argmax(dim=1)
+        effective_sequence_lengths[targets.ne(self.decoder.stop_index).all(dim=1)] = targets.size(dim=1)
+        return [
+            target.narrow(dim=0, start=0, length=sequence_length)
+            for target, sequence_length in zip(targets, effective_sequence_lengths, strict=True)
+        ]
+
+    @overload
+    def translate(
+        self,
+        texts: str,
+        method: Literal["greedy", "sampled", "beam-search"] = ...,
+        max_length: int = ...,
+        **kwargs: Any,
+    ) -> str:
+        ...
+
+    @overload
+    def translate(
+        self,
+        texts: list[str],
+        method: Literal["greedy", "sampled", "beam-search"] = ...,
+        max_length: int = ...,
+        **kwargs: Any,
+    ) -> list[str]:
+        ...
+
+    @torch.no_grad()
+    def translate(
+        self,
+        texts: str | list[str],
+        method: Literal["greedy", "sampled", "beam-search"] = "sampled",
+        max_length: int = 512,
+        **kwargs: Any,
+    ) -> str | list[str]:
+        self.eval()
+
+        is_batched_input: bool = isinstance(texts, list)
+        if not is_batched_input:
+            texts = cast(list[str], [texts])
+
+        tokenized_sources: list[Sequence[str]] = [self.source_tokenizer(text) for text in texts]
+        source_batch: list[Tensor] = [
+            torch.tensor(self.source_language.encode(tokens), dtype=torch.long, device=self.device)
+            for tokens in tokenized_sources
+        ]
+        sources: Tensor = torch.nn.utils.rnn.pad_sequence(
+            source_batch,
+            batch_first=True,
+            padding_value=cast(int, self.encoder.padding_index),
+        )
+
+        targets: Tensor = self.generate(sources, method=method, max_length=max_length, **kwargs)
+
+        translations: list[str] = []
+        for target in self._truncate_predicted_targets(targets):
+            tokenized_target: list[str] = self.target_language.decode(target)
+            detokenized_target: str = self.target_detokenizer(tokenized_target)
+            translations.append(detokenized_target)
+
+        return translations if is_batched_input else translations[0]
 
     @torch.no_grad()
     def evaluate(
@@ -124,7 +198,7 @@ class Translator(Seq2Seq):
         Returns:
             Dictionary containing the score, the individual precisions and the length of the translation and the target.
         """
-        translated_sources = [self.translate(source) for source in sources]
+        translated_sources: list[str] = [self.translate(source) for source in sources]
         bleu = BLEU(max_ngram_order=max_ngram_order)
         bleu_corpus_score = bleu.corpus_score(translated_sources, [targets])
         return {

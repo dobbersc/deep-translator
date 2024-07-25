@@ -1,4 +1,5 @@
 import random
+from collections.abc import Callable
 from typing import Any, Literal
 
 import torch
@@ -192,22 +193,94 @@ class DecoderLSTM(Module):
         # Shape: [batch_size, max(target_sequence_lengths), target_vocabulary_size].
         return prediction_log_probabilities.transpose(0, 1)
 
+    def _decode_sequential(
+        self,
+        encoder_hidden_states: Tensor | None,
+        encoder_hidden_and_cell: tuple[Tensor, Tensor] | None,
+        aggregation_function: Callable[[Tensor], Tensor],
+        max_length: int,
+    ) -> Tensor:
+        batch_size: int
+        if encoder_hidden_states is not None:
+            batch_size = encoder_hidden_states.size(dim=0)
+        elif encoder_hidden_and_cell is not None:
+            batch_size = encoder_hidden_and_cell[0].size(dim=1)
+        else:
+            msg: str = (
+                "Decoding requires either 'encoder_hidden_states' or "
+                "'encoder_hidden_and_cell' or both, but none were provided."
+            )
+            raise ValueError(msg)
+
+        # The initial token is always the seperator token.
+        current_tokens: Tensor = torch.full(
+            size=(batch_size,),
+            fill_value=self.seperator_index,
+            dtype=torch.long,
+            device=self.device,
+        )
+
+        # Use a boolean list as an indicator when all predicted sequences in the batch have reached the stop token.
+        stopped: list[bool] = [False] * batch_size
+        predicted_token_indices: list[Tensor] = []
+
+        decoder_hidden_and_cell: tuple[Tensor, Tensor] | None = encoder_hidden_and_cell
+        for _ in range(max_length):
+            predicted_log_probabilities, decoder_hidden_and_cell, _ = self.step(
+                current_tokens,
+                hidden_and_cell=decoder_hidden_and_cell,
+                encoder_hidden_states=encoder_hidden_states,
+            )
+
+            # Use the aggregation function to obtain the predicted batch of tokens from the log probabilities and
+            # re-inject the predicted tokens into the decoder for the next iteration.
+            current_tokens = aggregation_function(predicted_log_probabilities)
+            predicted_token_indices.append(current_tokens)
+
+            # Update which sentences in the batch have reached the stop symbol
+            for batch_index, token_index in enumerate(current_tokens):
+                if token_index == self.stop_index:
+                    stopped[batch_index] = True
+
+            # Exit the loop if all sequences have reached the stop token.
+            if all(stopped):
+                break
+
+        return torch.stack(predicted_token_indices, dim=1)  # Shape: [batch_size, sequence_length]
+
     def decode_greedy(
         self,
-        encoder_hidden_states: Tensor,
-        encoder_hidden_and_cell: tuple[Tensor, Tensor],
+        encoder_hidden_states: Tensor | None = None,
+        encoder_hidden_and_cell: tuple[Tensor, Tensor] | None = None,
         max_length: int = 512,
     ) -> Tensor:
-        raise NotImplementedError
+        def aggregation_function(log_probabilities: Tensor) -> Tensor:
+            return log_probabilities.argmax(dim=1)
+
+        return self._decode_sequential(
+            encoder_hidden_states,
+            encoder_hidden_and_cell,
+            aggregation_function=aggregation_function,
+            max_length=max_length,
+        )
 
     def decode_sampled(
         self,
-        encoder_hidden_states: Tensor,
-        encoder_hidden_and_cell: tuple[Tensor, Tensor],
-        temperature: float = 0.2,
+        encoder_hidden_states: Tensor | None = None,
+        encoder_hidden_and_cell: tuple[Tensor, Tensor] | None = None,
+        temperature: float = 0.8,
         max_length: int = 512,
     ) -> Tensor:
-        raise NotImplementedError
+        def aggregation_function(log_probabilities: Tensor) -> Tensor:
+            token_weights: Tensor = log_probabilities.div(temperature).exp()
+            return torch.multinomial(token_weights, num_samples=1).squeeze(dim=1)
+
+        return self._decode_sequential(
+            encoder_hidden_states,
+            encoder_hidden_and_cell,
+            aggregation_function=aggregation_function,
+            max_length=max_length,
+        )
 
     def decode_beam_search(
         self,
@@ -230,4 +303,6 @@ class DecoderLSTM(Module):
             return self.decode_sampled(encoder_hidden_states, encoder_hidden_and_cell, **kwargs)
         if method == "beam-search":
             return self.decode_beam_search(encoder_hidden_states, encoder_hidden_and_cell, **kwargs)
-        raise ValueError
+
+        msg: str = f"Invalid decoding method {method!r}. Choose from 'greedy', 'sampled' or 'beam-search'."
+        raise ValueError(msg)
