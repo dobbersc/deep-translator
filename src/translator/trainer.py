@@ -102,7 +102,6 @@ class ModelTrainer:
         logger.info("Computational Parameters:")
         logger.info(" - num_workers: %r", num_workers)
         logger.info(" - device: %r", self.model.device)
-        logger.info(LOG_SEPARATOR)
 
         logger.info(LOG_SEPARATOR)
         logger.info("Dataset Splits:")
