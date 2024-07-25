@@ -6,6 +6,7 @@ from typing import IO, Any, Self
 
 import torch
 from gensim.models import KeyedVectors
+from sacrebleu.metrics.bleu import BLEU
 from torch import Tensor
 from tqdm import tqdm
 
@@ -112,8 +113,26 @@ class Translator(Seq2Seq):
 
         return validation_loss, validation_perplexity
 
-    def evaluate_bleu(self, sources: Sequence[str], targets: Sequence[str], batch_size: int = 32) -> float:
-        raise NotImplementedError
+    def evaluate_bleu(self, sources: Sequence[str], targets: Sequence[str], max_ngram_order: int = 4) -> dict[str, Any]:
+        """Calculates the BLEU score for the targets and the translation of the given sources.
+
+        Args:
+            sources: Sources that are translated.
+            targets: Target text for each of the given sources.
+            max_ngram_order: Bleu considers all n-gram precisions, where 1<=n<=max_ngram_order. Defaults to 4.
+
+        Returns:
+            Dictionary containing the score, the individual precisions and the length of the translation and the target.
+        """
+        translated_sources = [self.translate(source) for source in sources]
+        bleu = BLEU(max_ngram_order=max_ngram_order)
+        bleu_corpus_score = bleu.corpus_score(translated_sources, [targets])
+        return {
+            "score": bleu_corpus_score.score,
+            "precisions": bleu_corpus_score.precisions,
+            "source_len": bleu_corpus_score.sys_len,
+            "target_len": bleu_corpus_score.ref_len,
+        }
 
     def save(self, f: str | Path | IO[bytes]) -> None:
         if self.encoder.lstm.hidden_size != self.decoder.lstm.hidden_size:
