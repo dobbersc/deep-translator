@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any, Self
 
 import numpy as np
 from gensim.models import KeyedVectors
+from torch import Tensor
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -120,16 +121,16 @@ class Language(Sized):
         """
         return [self.get_index(token) for token in tokens]
 
-    def decode(self, indices: Iterable[int]) -> list[str]:
+    def decode(self, indices: Iterable[int | Tensor]) -> list[str]:
         """Decodes indices to their token representation.
 
         Args:
-            indices: An iterable of indices.
+            indices: An iterable of indices of integers or single element tensors.
 
         Returns:
             An list of tokens corresponding to the input indices.
         """
-        return [self.get_token(index) for index in indices]
+        return [self.get_token(index if isinstance(index, int) else index.item()) for index in indices]  # type: ignore[arg-type]
 
     @property
     def padding_token_index(self) -> int:
