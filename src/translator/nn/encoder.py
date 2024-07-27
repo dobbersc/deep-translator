@@ -14,6 +14,8 @@ class EncoderLSTM(Module):
         embedding_size: int,
         hidden_size: int,
         *,
+        num_layers: int = 1,
+        bidirectional: bool = False,
         pretrained_embeddings: KeyedVectors | Tensor | None = None,
         freeze_pretrained_embeddings: bool = True,
         embedding_dropout: float = 0,
@@ -27,6 +29,8 @@ class EncoderLSTM(Module):
             vocabulary_size: The size of the source vocabulary.
             embedding_size: The size of the source embeddings.
             hidden_size: The size of the LSTM hidden state.
+            num_layers: The number of LSTM's recurrent layers.
+            bidirectional: If true, a bidirectional LSTM will be used.
             pretrained_embeddings: Optional pretrained embeddings to initialize the embedding layer.
             freeze_pretrained_embeddings: If True, freezes the pretrained embeddings.
             embedding_dropout: If non-zero, introduces a dropout layer on the outputs of the embedding layer,
@@ -46,7 +50,14 @@ class EncoderLSTM(Module):
             padding_index=padding_index,
         )
         self.dropout: torch.nn.Dropout = torch.nn.Dropout(embedding_dropout)
-        self.lstm: torch.nn.LSTM = torch.nn.LSTM(embedding_size, hidden_size, dropout=dropout, batch_first=True)
+        self.lstm: torch.nn.LSTM = torch.nn.LSTM(
+            embedding_size,
+            hidden_size,
+            num_layers=num_layers,
+            dropout=dropout,
+            bidirectional=bidirectional,
+            batch_first=True,
+        )
 
         self.padding_index = padding_index
         self.start_index = start_index
@@ -100,9 +111,9 @@ class EncoderLSTM(Module):
                 Must be a CPU tensor of type `torch.long`. Shape: [batch_size].
 
         Returns:
-            The encoder's LSTM hidden states (of shape: [batch_size, max(source_sequence_lengths), hidden_size]) and
-            the last (hidden, cell) state of the LSTM (each of shape: [1, batch_size, hidden_size]).
-
+            The encoder's LSTM hidden states (of shape: [batch_size, max(source_sequence_lengths), D * hidden_size]) and
+            the last (hidden, cell) state of the LSTM (each of shape: [D * num_layers, batch_size, hidden_size]).
+            D := 2 if bidirectional; otherwise 1.
         """
         sources = self.make_input_sources(sources)
         source_sequence_lengths = (

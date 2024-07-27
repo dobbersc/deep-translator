@@ -28,18 +28,24 @@ class Translator(Seq2Seq):
         source_embedding_size: int = 256,
         target_embedding_size: int = 256,
         hidden_size: int = 512,
+        encoder_num_layers: int = 1,
+        decoder_num_layers: int | None = None,
+        bidirectional_encoder: bool = False,
         attention: None = None,  # noqa: ARG002
         source_pretrained_embeddings: KeyedVectors | Tensor | None = None,
         target_pretrained_embeddings: KeyedVectors | Tensor | None = None,
         freeze_pretrained_embeddings: bool = True,
         embedding_dropout: float = 0,
         dropout: float = 0,
+        propagate_hidden_and_cell_state: bool = True,
     ) -> None:
         super().__init__(
             EncoderLSTM(
                 vocabulary_size=source_language.vocabulary_size,
                 embedding_size=source_embedding_size,
                 hidden_size=hidden_size,
+                num_layers=encoder_num_layers,
+                bidirectional=bidirectional_encoder,
                 pretrained_embeddings=source_pretrained_embeddings,
                 freeze_pretrained_embeddings=freeze_pretrained_embeddings,
                 embedding_dropout=embedding_dropout,
@@ -50,7 +56,9 @@ class Translator(Seq2Seq):
             DecoderLSTM(
                 vocabulary_size=target_language.vocabulary_size,
                 embedding_size=target_embedding_size,
-                hidden_size=hidden_size,
+                hidden_size=2 * hidden_size if bidirectional_encoder else hidden_size,
+                num_layers=encoder_num_layers if decoder_num_layers is None else decoder_num_layers,
+                bidirectional_encoder=bidirectional_encoder,
                 pretrained_embeddings=target_pretrained_embeddings,
                 freeze_pretrained_embeddings=freeze_pretrained_embeddings,
                 embedding_dropout=embedding_dropout,
@@ -59,6 +67,7 @@ class Translator(Seq2Seq):
                 seperator_index=target_language.seperator_token_index,
                 stop_index=target_language.stop_token_index,
             ),
+            propagate_hidden_and_cell_state=propagate_hidden_and_cell_state,
         )
 
         self.source_language = source_language
@@ -209,10 +218,6 @@ class Translator(Seq2Seq):
         }
 
     def save(self, f: str | Path | IO[bytes]) -> None:
-        if self.encoder.lstm.hidden_size != self.decoder.lstm.hidden_size:
-            msg: str = "The hidden size of the encoder and decoder LSTMs must match to be serializable."
-            raise AssertionError(msg)
-
         if self.encoder.dropout.p != self.decoder.dropout.p:
             warnings.warn(
                 "Mismatch in embedding dropout probabilities between encoder and decoder embeddings. "
@@ -242,10 +247,14 @@ class Translator(Seq2Seq):
                 "source_embedding_size": self.encoder.embedding.embedding_dim,
                 "target_embedding_size": self.decoder.embedding.embedding_dim,
                 "hidden_size": self.encoder.lstm.hidden_size,
+                "encoder_num_layers": self.encoder.lstm.num_layers,
+                "decoder_num_layers": self.decoder.lstm.num_layers,
+                "bidirectional_encoder": self.encoder.lstm.bidirectional,
                 "freeze_source_embeddings": not self.encoder.embedding.weight.requires_grad,
                 "freeze_target_embeddings": not self.decoder.embedding.weight.requires_grad,
                 "embedding_dropout": self.encoder.dropout.p,
                 "dropout": self.encoder.lstm.dropout,
+                "propagate_hidden_and_cell_state": self.propagate_hidden_and_cell_state,
             },
             "state_dict": self.state_dict(),
         }
@@ -266,8 +275,12 @@ class Translator(Seq2Seq):
             source_embedding_size=parameters["source_embedding_size"],
             target_embedding_size=parameters["target_embedding_size"],
             hidden_size=parameters["hidden_size"],
+            encoder_num_layers=parameters["encoder_num_layers"],
+            decoder_num_layers=parameters["decoder_num_layers"],
+            bidirectional_encoder=parameters["bidirectional_encoder"],
             embedding_dropout=parameters["embedding_dropout"],
             dropout=parameters["dropout"],
+            propagate_hidden_and_cell_state=parameters["propagate_hidden_and_cell_state"],
         )
 
         translator.load_state_dict(serialized["state_dict"])

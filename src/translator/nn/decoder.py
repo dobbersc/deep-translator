@@ -6,6 +6,7 @@ import torch
 from gensim.models import KeyedVectors
 from torch import Tensor
 
+from translator.nn.attention import Attention
 from translator.nn.module import Module
 from translator.nn.utils import build_embedding_layer
 
@@ -17,6 +18,9 @@ class DecoderLSTM(Module):
         embedding_size: int,
         hidden_size: int,
         *,
+        num_layers: int = 1,
+        bidirectional_encoder: bool = False,
+        attention: Attention | None = None,
         pretrained_embeddings: KeyedVectors | Tensor | None = None,
         freeze_pretrained_embeddings: bool = True,
         embedding_dropout: float = 0,
@@ -31,6 +35,10 @@ class DecoderLSTM(Module):
             vocabulary_size: The size of the target vocabulary.
             embedding_size: The size of the target embeddings.
             hidden_size: The size of the LSTM hidden state.
+            num_layers: The number of LSTM's recurrent layers.
+            bidirectional_encoder: Flag to indicate whether the connected encoder is bidirectional.
+                See the decoder's forward method for more information about the flag's influences.
+            attention: TODO.
             pretrained_embeddings: Optional pretrained embeddings to initialize the embedding layer.
             freeze_pretrained_embeddings: If True, freezes the pretrained embeddings.
             embedding_dropout: If non-zero, introduces a dropout layer on the outputs of the embedding layer,
@@ -51,9 +59,18 @@ class DecoderLSTM(Module):
             padding_index=padding_index,
         )
         self.dropout: torch.nn.Dropout = torch.nn.Dropout(embedding_dropout)
-        self.lstm: torch.nn.LSTM = torch.nn.LSTM(embedding_size, hidden_size, dropout=dropout, batch_first=True)
+        self.lstm: torch.nn.LSTM = torch.nn.LSTM(
+            embedding_size,
+            hidden_size,
+            num_layers=num_layers,
+            dropout=dropout,
+            batch_first=True,
+        )
+        self.attention = attention
         self.hidden2vocab: torch.nn.Linear = torch.nn.Linear(hidden_size, vocabulary_size)
         self.log_softmax: torch.nn.LogSoftmax = torch.nn.LogSoftmax(dim=-1)
+
+        self.bidirectional_encoder = bidirectional_encoder
 
         self.padding_index = padding_index
         self.seperator_index = seperator_index
@@ -93,6 +110,65 @@ class DecoderLSTM(Module):
         )
         return torch.cat((targets, stop_tokens), dim=1)
 
+    @staticmethod
+    def _transfer_directions_to_hidden_size(hidden_or_cell: Tensor) -> Tensor:
+        """Concatenates the forward and backward directions of the hidden and cell state in the `hidden_size` dimension.
+
+        Args:
+            hidden_or_cell: A hidden and cell state from a bidirectional encoder
+                (each of shape [2 * encoder_num_layers, batch_size, encoder_hidden_size].
+
+        Returns:
+            The transformed hidden and cell state. Shape: [encoder_num_layers, batch_size, 2 * encoder_hidden_size].
+        """
+        directions_times_num_layers = hidden_or_cell.size(dim=0)
+        return torch.cat(
+            (
+                hidden_or_cell[0:directions_times_num_layers:2],
+                hidden_or_cell[1:directions_times_num_layers:2],
+            ),
+            dim=2,
+        )
+
+    def _init_decoder_hidden_and_cell(
+        self,
+        encoder_hidden_and_cell: tuple[Tensor, Tensor] | None,
+    ) -> tuple[Tensor, Tensor] | None:
+        """Initializes the decoder's initial hidden and cell state from the encoder's last hidden and cell state.
+
+        If the encoder is bidirectional, the forward and backward directions of its
+        hidden and cell state get concatenated in the `hidden_size` dimension.
+        From the resulting states, the top `decoder_num_layers` states will be used as the decoder's initial state.
+
+        # TODO: Other ideas for the case where decoder_num_layers <= encoder_num_layers:
+            - Average the encoder's hidden and cell state and use the same hidden and cell state for all decoder layers.
+            - Employ a linear projection layer and use the same hidden and cell state for all decoder layers.
+
+        # TODO: We could also allow decoder_num_layers > encoder_num_layers,
+            by initializing the remaining hidden and cell states with zeros.
+
+        Args:
+            encoder_hidden_and_cell: A hidden and cell state from the encoder
+                (each of shape [D * encoder_num_layers, batch_size, encoder_hidden_size].
+
+        Returns:
+            The decoder's initial hidden and cell state
+            (each of shape: [decoder_num_layers, batch_size, decoder_hidden_size],
+            where decoder_hidden_size := D * encoder_hidden_size and decoder_num_layers <= encoder_num_layers).
+        """
+        if encoder_hidden_and_cell is None:
+            return None
+
+        hidden, cell = encoder_hidden_and_cell
+        if self.bidirectional_encoder:
+            hidden = self._transfer_directions_to_hidden_size(hidden)
+            cell = self._transfer_directions_to_hidden_size(cell)
+
+        hidden = hidden[-self.lstm.num_layers :]
+        cell = cell[-self.lstm.num_layers :]
+
+        return hidden, cell
+
     def step(
         self,
         decoder_input: Tensor,
@@ -103,14 +179,17 @@ class DecoderLSTM(Module):
 
         Args:
             decoder_input: The input token indices for the decoder at the current time step. Shape: [batch_size].
-            hidden_and_cell: The hidden and cell state for the LSTM (each of shape [1, batch_size, hidden_size]).
+            hidden_and_cell: The hidden and cell state for the decoder's LSTM
+                (each of shape [decoder_num_layers, batch_size, decoder_hidden_size]).
             encoder_hidden_states: TODO: Placeholder for later attention
+                Shape: [batch_size, max(source_sequence_lengths), D * encoder_hidden_size],
+                where decoder_hidden_size := D * encoder_hidden_size.
 
         Returns:
             - log_probabilities: The predicted log softmax probabilities for the next token in the target vocabulary.
                 Shape: [batch_size, target_vocabulary_size].
-            - last_hidden_and_cell: The updated (hidden, cell) state of the LSTM after processing the input
-                (each of shape: [1, batch_size, hidden_size]).
+            - last_hidden_and_cell: The updated (hidden, cell) state of the decoder's LSTM after processing the input
+                (each of shape: [decoder_num_layers, batch_size, decoder_hidden_size]).
             - None: TODO: Placeholder for later attention
         """
         # Reshape the decoder inputs to tensors of sequence length 1 for the LSTM. Shape: [batch_size, 1].
@@ -138,13 +217,19 @@ class DecoderLSTM(Module):
     ) -> Tensor:
         """Forwards batches of (padded) targets as tensor of token indices through the decoder.
 
-        TODO: Decide if the None values make sense
+        For the following argument descriptions, we define D := 2 if bidirectional_encoder; otherwise 1.
 
         Args:
             targets: A tensor of token indices. Shape: [batch_size, max(target_sequence_lengths)].
-            encoder_hidden_states: TODO: Placeholder for later attention
+            encoder_hidden_states: TODO: Placeholder for later attention.
+                Shape: [batch_size, max(source_sequence_lengths), D * encoder_hidden_size],
+                where decoder_hidden_size := D * encoder_hidden_size.
             encoder_hidden_and_cell: An optional initial hidden and cell state from the encoder for the LSTM
-                (each of shape [1, batch_size, hidden_size]).
+                (each of shape [D * encoder_num_layers, batch_size, encoder_hidden_size],
+                where decoder_hidden_size := D * encoder_hidden_size and decoder_num_layers <= encoder_num_layers).
+                If the encoder is bidirectional, the forward and backward directions of its
+                hidden and cell state get concatenated in the `hidden_size` dimension. From the resulting states,
+                the top `decoder_num_layers` states will be used as the decoder's initial state.
             teacher_forcing_ratio: The probability that teacher forcing will be used.
                 For each decoding token, a random number is drawn uniformly from the interval [0, 1).
                 If the random number is below the specified value, teacher forcing will be applied (default is 0.5).
@@ -153,6 +238,15 @@ class DecoderLSTM(Module):
             The predicted log softmax probabilities in the target vocabulary for each token in the target sequence.
             Shape: [batch_size, max(target_sequence_lengths), target_vocabulary_size].
         """
+        msg: str
+        if self.attention is None and encoder_hidden_and_cell is None:
+            msg = "The 'encoder_hidden_and_cell' parameter must be provided when attention disabled."
+            raise ValueError(msg)
+
+        if self.attention is not None and encoder_hidden_states is None:
+            msg = "The 'encoder_hidden_states' parameter must be provided when attention is enabled."
+            raise ValueError(msg)
+
         targets = self.make_input_sequences(targets)
 
         # Create a tensor that contains the log probabilities for each predicted token.
@@ -167,7 +261,9 @@ class DecoderLSTM(Module):
         decoder_output: Tensor | None = None  # Shape: [batch_size, target_vocabulary_size]
 
         # If provided, the decoder's initial (hidden, cell) state is the encoder's last (hidden, cell) state.
-        decoder_hidden_and_cell: tuple[Tensor, Tensor] | None = encoder_hidden_and_cell
+        decoder_hidden_and_cell: tuple[Tensor, Tensor] | None = self._init_decoder_hidden_and_cell(
+            encoder_hidden_and_cell,
+        )
 
         # Iterate batch-wise through every token in the decoder input sequences and
         # populate the prediction log probabilities tensor. Shape: [batch_size].
@@ -224,7 +320,9 @@ class DecoderLSTM(Module):
         stopped: list[bool] = [False] * batch_size
         predicted_token_indices: list[Tensor] = []
 
-        decoder_hidden_and_cell: tuple[Tensor, Tensor] | None = encoder_hidden_and_cell
+        decoder_hidden_and_cell: tuple[Tensor, Tensor] | None = self._init_decoder_hidden_and_cell(
+            encoder_hidden_and_cell,
+        )
         for _ in range(max_length):
             predicted_log_probabilities, decoder_hidden_and_cell, _ = self.step(
                 current_tokens,
@@ -304,5 +402,5 @@ class DecoderLSTM(Module):
         if method == "beam-search":
             return self.decode_beam_search(encoder_hidden_states, encoder_hidden_and_cell, **kwargs)
 
-        msg: str = f"Invalid decoding method {method!r}. Choose from 'greedy', 'sampled' or 'beam-search'."
+        msg: str = f"Invalid decoding method {method!r}. Choose from 'greedy', 'sampled' or 'beam-search'."  # type: ignore[unreachable]
         raise ValueError(msg)
