@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from translator.datasets import VectorizedDataPointBatch
 from translator.language import Language
-from translator.nn import DecoderLSTM, EncoderLSTM, Seq2Seq
+from translator.nn import DecoderLSTM, DotProductAttention, EncoderLSTM, Seq2Seq
 from translator.tokenizers import Detokenizer, Tokenizer
 
 
@@ -31,7 +31,7 @@ class Translator(Seq2Seq):
         encoder_num_layers: int = 1,
         decoder_num_layers: int | None = None,
         bidirectional_encoder: bool = False,
-        attention: None = None,  # noqa: ARG002
+        attention: bool = False,
         source_pretrained_embeddings: KeyedVectors | Tensor | None = None,
         target_pretrained_embeddings: KeyedVectors | Tensor | None = None,
         freeze_pretrained_embeddings: bool = True,
@@ -39,6 +39,7 @@ class Translator(Seq2Seq):
         dropout: float = 0,
         propagate_hidden_and_cell_state: bool = True,
     ) -> None:
+        decoder_hidden_size: int = 2 * hidden_size if bidirectional_encoder else hidden_size
         super().__init__(
             EncoderLSTM(
                 vocabulary_size=source_language.vocabulary_size,
@@ -56,9 +57,11 @@ class Translator(Seq2Seq):
             DecoderLSTM(
                 vocabulary_size=target_language.vocabulary_size,
                 embedding_size=target_embedding_size,
-                hidden_size=2 * hidden_size if bidirectional_encoder else hidden_size,
+                hidden_size=decoder_hidden_size,
                 num_layers=encoder_num_layers if decoder_num_layers is None else decoder_num_layers,
                 bidirectional_encoder=bidirectional_encoder,
+                # TODO: Support more attention variants. This may lead to problem regarding the serialization.
+                attention=DotProductAttention(decoder_hidden_size) if attention else None,
                 pretrained_embeddings=target_pretrained_embeddings,
                 freeze_pretrained_embeddings=freeze_pretrained_embeddings,
                 embedding_dropout=embedding_dropout,
@@ -250,6 +253,7 @@ class Translator(Seq2Seq):
                 "encoder_num_layers": self.encoder.lstm.num_layers,
                 "decoder_num_layers": self.decoder.lstm.num_layers,
                 "bidirectional_encoder": self.encoder.lstm.bidirectional,
+                "attention": self.decoder.attention is not None,
                 "freeze_source_embeddings": not self.encoder.embedding.weight.requires_grad,
                 "freeze_target_embeddings": not self.decoder.embedding.weight.requires_grad,
                 "embedding_dropout": self.encoder.dropout.p,
@@ -278,6 +282,7 @@ class Translator(Seq2Seq):
             encoder_num_layers=parameters["encoder_num_layers"],
             decoder_num_layers=parameters["decoder_num_layers"],
             bidirectional_encoder=parameters["bidirectional_encoder"],
+            attention=parameters["attention"],
             embedding_dropout=parameters["embedding_dropout"],
             dropout=parameters["dropout"],
             propagate_hidden_and_cell_state=parameters["propagate_hidden_and_cell_state"],

@@ -12,6 +12,12 @@ from translator.nn.utils import build_embedding_layer
 
 
 class DecoderLSTM(Module):
+    """Implementation of a Luong Decoder.
+
+    [Effective Approaches to Attention-based Neural Machine Translation](https://aclanthology.org/D15-1166)
+    (Luong et al., EMNLP 2015)
+    """
+
     def __init__(
         self,
         vocabulary_size: int,
@@ -38,7 +44,7 @@ class DecoderLSTM(Module):
             num_layers: The number of LSTM's recurrent layers.
             bidirectional_encoder: Flag to indicate whether the connected encoder is bidirectional.
                 See the decoder's forward method for more information about the flag's influences.
-            attention: TODO.
+            attention: An optional attention module.
             pretrained_embeddings: Optional pretrained embeddings to initialize the embedding layer.
             freeze_pretrained_embeddings: If True, freezes the pretrained embeddings.
             embedding_dropout: If non-zero, introduces a dropout layer on the outputs of the embedding layer,
@@ -173,25 +179,36 @@ class DecoderLSTM(Module):
         self,
         decoder_input: Tensor,
         hidden_and_cell: tuple[Tensor, Tensor] | None = None,
-        encoder_hidden_states: Tensor | None = None,  # noqa: ARG002
-    ) -> tuple[Tensor, tuple[Tensor, Tensor], Tensor | None]:
+        encoder_hidden_states: Tensor | None = None,
+        attention_mask: Tensor | None = None,
+    ) -> tuple[Tensor, tuple[Tensor, Tensor], tuple[Tensor, Tensor] | None]:
         """Performs a single decoding step through the decoder.
 
         Args:
             decoder_input: The input token indices for the decoder at the current time step. Shape: [batch_size].
-            hidden_and_cell: The hidden and cell state for the decoder's LSTM
+            hidden_and_cell: A optional hidden and cell state for the decoder's LSTM
                 (each of shape [decoder_num_layers, batch_size, decoder_hidden_size]).
-            encoder_hidden_states: TODO: Placeholder for later attention
+            encoder_hidden_states: Optional encoder's LSTM hidden states used for the attention computation.
+                These are only required if attention is enabled.
                 Shape: [batch_size, max(source_sequence_lengths), D * encoder_hidden_size],
                 where decoder_hidden_size := D * encoder_hidden_size.
+            attention_mask: An optional attention mask to exclude source tokens from the attention computation,
+                e.g. padding tokens. The mask will only be effective if attention is enabled.
+                Shape: [batch_size, max(source_sequence_lengths)].
 
         Returns:
             - log_probabilities: The predicted log softmax probabilities for the next token in the target vocabulary.
                 Shape: [batch_size, target_vocabulary_size].
             - last_hidden_and_cell: The updated (hidden, cell) state of the decoder's LSTM after processing the input
                 (each of shape: [decoder_num_layers, batch_size, decoder_hidden_size]).
-            - None: TODO: Placeholder for later attention
+            - attention_distribution_and_output: A tuple of the attention scores and attention distribution
+                if attention is enabled. Otherwise, this value will be `None` for compatibility.
+                Each of shape [batch_size, output_sequence_length, context_sequence_length].
         """
+        if self.attention is not None and encoder_hidden_states is None:
+            msg: str = "The 'encoder_hidden_states' parameter must be provided when attention is enabled."
+            raise ValueError(msg)
+
         # Reshape the decoder inputs to tensors of sequence length 1 for the LSTM. Shape: [batch_size, 1].
         decoder_input = decoder_input.unsqueeze(dim=1)
 
@@ -199,20 +216,29 @@ class DecoderLSTM(Module):
         embedded: Tensor = self.embedding(decoder_input)
         embedded = self.dropout(embedded)
 
-        decoder_hidden_states, last_hidden_and_cell = self.lstm(embedded, hidden_and_cell)
+        output, last_hidden_and_cell = self.lstm(embedded, hidden_and_cell)
+
+        attention_distribution_and_output: tuple[Tensor, Tensor] | None = None
+        if self.attention:
+            output, attention_distribution_and_output = self.attention(
+                output=output,
+                context=encoder_hidden_states,
+                mask=None if attention_mask is None else attention_mask.unsqueeze(dim=1),
+            )
 
         # Transform the batch's hidden states to the vocabulary space and
         # obtain the log softmax probabilities for each token. Shape: [batch_size, 1, target_vocabulary_size].
-        logits: Tensor = self.hidden2vocab(decoder_hidden_states)
+        logits: Tensor = self.hidden2vocab(output)
         log_probabilities: Tensor = self.log_softmax(logits)
 
-        return log_probabilities.squeeze(dim=1), last_hidden_and_cell, None
+        return log_probabilities.squeeze(dim=1), last_hidden_and_cell, attention_distribution_and_output
 
     def forward(
         self,
         targets: Tensor,
         encoder_hidden_states: Tensor | None = None,
         encoder_hidden_and_cell: tuple[Tensor, Tensor] | None = None,
+        attention_mask: Tensor | None = None,
         teacher_forcing_ratio: float = 0.5,
     ) -> Tensor:
         """Forwards batches of (padded) targets as tensor of token indices through the decoder.
@@ -221,7 +247,8 @@ class DecoderLSTM(Module):
 
         Args:
             targets: A tensor of token indices. Shape: [batch_size, max(target_sequence_lengths)].
-            encoder_hidden_states: TODO: Placeholder for later attention.
+            encoder_hidden_states: Optional encoder's LSTM hidden states used for the attention computation.
+                These are only required if attention is enabled.
                 Shape: [batch_size, max(source_sequence_lengths), D * encoder_hidden_size],
                 where decoder_hidden_size := D * encoder_hidden_size.
             encoder_hidden_and_cell: An optional initial hidden and cell state from the encoder for the LSTM
@@ -230,6 +257,9 @@ class DecoderLSTM(Module):
                 If the encoder is bidirectional, the forward and backward directions of its
                 hidden and cell state get concatenated in the `hidden_size` dimension. From the resulting states,
                 the top `decoder_num_layers` states will be used as the decoder's initial state.
+            attention_mask: An optional attention mask to exclude source tokens from the attention computation,
+                e.g. padding tokens. The mask will only be effective if attention is enabled.
+                Shape: [batch_size, max(source_sequence_lengths)].
             teacher_forcing_ratio: The probability that teacher forcing will be used.
                 For each decoding token, a random number is drawn uniformly from the interval [0, 1).
                 If the random number is below the specified value, teacher forcing will be applied (default is 0.5).
@@ -282,6 +312,7 @@ class DecoderLSTM(Module):
                 effective_decoder_input,
                 hidden_and_cell=decoder_hidden_and_cell,
                 encoder_hidden_states=encoder_hidden_states,
+                attention_mask=attention_mask,
             )
             prediction_log_probabilities[sequence_index] = decoder_output
 
@@ -293,6 +324,7 @@ class DecoderLSTM(Module):
         self,
         encoder_hidden_states: Tensor | None,
         encoder_hidden_and_cell: tuple[Tensor, Tensor] | None,
+        attention_mask: Tensor | None,
         aggregation_function: Callable[[Tensor], Tensor],
         max_length: int,
     ) -> Tensor:
@@ -328,6 +360,7 @@ class DecoderLSTM(Module):
                 current_tokens,
                 hidden_and_cell=decoder_hidden_and_cell,
                 encoder_hidden_states=encoder_hidden_states,
+                attention_mask=attention_mask,
             )
 
             # Use the aggregation function to obtain the predicted batch of tokens from the log probabilities and
@@ -350,6 +383,7 @@ class DecoderLSTM(Module):
         self,
         encoder_hidden_states: Tensor | None = None,
         encoder_hidden_and_cell: tuple[Tensor, Tensor] | None = None,
+        attention_mask: Tensor | None = None,
         max_length: int = 512,
     ) -> Tensor:
         def aggregation_function(log_probabilities: Tensor) -> Tensor:
@@ -358,6 +392,7 @@ class DecoderLSTM(Module):
         return self._decode_sequential(
             encoder_hidden_states,
             encoder_hidden_and_cell,
+            attention_mask=attention_mask,
             aggregation_function=aggregation_function,
             max_length=max_length,
         )
@@ -366,6 +401,7 @@ class DecoderLSTM(Module):
         self,
         encoder_hidden_states: Tensor | None = None,
         encoder_hidden_and_cell: tuple[Tensor, Tensor] | None = None,
+        attention_mask: Tensor | None = None,
         temperature: float = 0.8,
         max_length: int = 512,
     ) -> Tensor:
@@ -376,31 +412,39 @@ class DecoderLSTM(Module):
         return self._decode_sequential(
             encoder_hidden_states,
             encoder_hidden_and_cell,
+            attention_mask=attention_mask,
             aggregation_function=aggregation_function,
             max_length=max_length,
         )
 
     def decode_beam_search(
         self,
-        encoder_hidden_states: Tensor,
-        encoder_hidden_and_cell: tuple[Tensor, Tensor],
+        encoder_hidden_states: Tensor | None,
+        encoder_hidden_and_cell: tuple[Tensor, Tensor] | None,
+        attention_mask: Tensor | None = None,
         max_length: int = 512,
     ) -> Tensor:
         raise NotImplementedError
 
     def decode(
         self,
-        encoder_hidden_states: Tensor,
-        encoder_hidden_and_cell: tuple[Tensor, Tensor],
+        encoder_hidden_states: Tensor | None = None,
+        encoder_hidden_and_cell: tuple[Tensor, Tensor] | None = None,
+        attention_mask: Tensor | None = None,
         method: Literal["greedy", "sampled", "beam-search"] = "sampled",
         **kwargs: Any,
     ) -> Tensor:
+        standard_arguments: dict[str, Any] = {
+            "encoder_hidden_states": encoder_hidden_states,
+            "encoder_hidden_and_cell": encoder_hidden_and_cell,
+            "attention_mask": attention_mask,
+        }
         if method == "greedy":
-            return self.decode_greedy(encoder_hidden_states, encoder_hidden_and_cell, **kwargs)
+            return self.decode_greedy(**standard_arguments, **kwargs)
         if method == "sampled":
-            return self.decode_sampled(encoder_hidden_states, encoder_hidden_and_cell, **kwargs)
+            return self.decode_sampled(**standard_arguments, **kwargs)
         if method == "beam-search":
-            return self.decode_beam_search(encoder_hidden_states, encoder_hidden_and_cell, **kwargs)
+            return self.decode_beam_search(**standard_arguments, **kwargs)
 
         msg: str = f"Invalid decoding method {method!r}. Choose from 'greedy', 'sampled' or 'beam-search'."  # type: ignore[unreachable]
         raise ValueError(msg)

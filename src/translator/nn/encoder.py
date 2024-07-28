@@ -79,7 +79,38 @@ class EncoderLSTM(Module):
         )
         return torch.cat((start_tokens, sources), dim=1)
 
-    def _infer_sequence_lengths(self, sources: Tensor) -> Tensor:
+    def make_padding_mask(self, sources: Tensor) -> Tensor:
+        """Creates a padding mask for a batch of source sequences.
+
+        The padding mask accounts for the start special token by prepending `False` to each source sequence's mask.
+
+        Args:
+            sources: A tensor of token indices (excluding the start special token).
+                Shape: [batch_size, max(source_sequence_lengths)].
+
+        Returns:
+            A boolean tensor indicating the positions of padding tokens in the sources.
+            Shape: [batch_size, max(source_sequence_lengths) + 1].
+        """
+        batch_size, max_sequence_length = sources.size()
+        if self.padding_index is None:
+            return torch.full(
+                (batch_size, max_sequence_length + 1),
+                fill_value=False,
+                dtype=torch.bool,
+                device=sources.device,
+            )
+
+        sources_mask: Tensor = sources.eq(self.padding_index)
+        start_token_mask: Tensor = torch.full(
+            size=(batch_size, 1),
+            fill_value=False,
+            dtype=torch.bool,
+            device=sources.device,
+        )
+        return torch.cat((start_token_mask, sources_mask), dim=1)
+
+    def infer_sequence_lengths(self, sources: Tensor) -> Tensor:
         """Infers the sequence lengths of a sources tensor using the padding index.
 
         If the encoder does not define a padding index,
@@ -117,7 +148,7 @@ class EncoderLSTM(Module):
         """
         sources = self.make_input_sources(sources)
         source_sequence_lengths = (
-            self._infer_sequence_lengths(sources)
+            self.infer_sequence_lengths(sources)
             if source_sequence_lengths is None
             else source_sequence_lengths + 1  # +1 for the start special token
         )

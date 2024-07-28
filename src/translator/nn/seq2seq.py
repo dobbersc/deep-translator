@@ -65,6 +65,7 @@ class Seq2Seq(Module):
             targets,
             encoder_hidden_states=encoder_hidden_states,
             encoder_hidden_and_cell=encoder_hidden_and_cell,
+            attention_mask=self.encoder.make_padding_mask(sources),
             teacher_forcing_ratio=teacher_forcing_ratio,
         )
         return log_probabilities
@@ -74,6 +75,7 @@ class Seq2Seq(Module):
         return self.decoder.decode_greedy(
             encoder_hidden_states=encoder_hidden_states,
             encoder_hidden_and_cell=encoder_hidden_and_cell,
+            attention_mask=self.encoder.make_padding_mask(sources),
             max_length=max_length,
         )
 
@@ -82,6 +84,7 @@ class Seq2Seq(Module):
         return self.decoder.decode_sampled(
             encoder_hidden_states=encoder_hidden_states,
             encoder_hidden_and_cell=encoder_hidden_and_cell,
+            attention_mask=self.encoder.make_padding_mask(sources),
             temperature=temperature,
             max_length=max_length,
         )
