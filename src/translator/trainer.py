@@ -4,7 +4,7 @@ import time
 from collections.abc import Callable, Sequence
 from typing import Any
 
-import torch.nn
+import torch
 from torch import Tensor
 
 from translator import LOG_SEPARATOR

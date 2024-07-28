@@ -1,4 +1,4 @@
-import torch.nn
+import torch
 
 
 class Module(torch.nn.Module):
