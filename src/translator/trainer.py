@@ -1,3 +1,4 @@
+import copy
 import functools
 import logging
 import time
@@ -245,7 +246,7 @@ class ModelTrainer:
                 else:
                     logger.info("New best score!")
                     best_dev_perplexity = dev_perplexity
-                    best_model_state_dict = self.model.state_dict()
+                    best_model_state_dict = copy.deepcopy(self.model.state_dict())
                     early_stopping_counter = 0
 
                 if early_stopping_counter == patience:
