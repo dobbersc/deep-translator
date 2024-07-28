@@ -4,9 +4,10 @@ from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from typing import IO, Any, Literal, Self, cast, overload
 
+import more_itertools
 import torch
 from gensim.models import KeyedVectors
-from sacrebleu.metrics.bleu import BLEU
+from sacrebleu.metrics.bleu import BLEU, BLEUScore
 from torch import Tensor
 from tqdm import tqdm
 
@@ -115,7 +116,7 @@ class Translator(Seq2Seq):
     @overload
     def translate(
         self,
-        texts: list[str],
+        texts: list[str] | tuple[str, ...],
         method: Literal["greedy", "sampled", "beam-search"] = ...,
         max_length: int = ...,
         **kwargs: Any,
@@ -125,14 +126,14 @@ class Translator(Seq2Seq):
     @torch.no_grad()
     def translate(
         self,
-        texts: str | list[str],
+        texts: str | list[str] | tuple[str, ...],
         method: Literal["greedy", "sampled", "beam-search"] = "sampled",
         max_length: int = 512,
         **kwargs: Any,
     ) -> str | list[str]:
         self.eval()
 
-        is_batched_input: bool = isinstance(texts, list)
+        is_batched_input: bool = isinstance(texts, (list | tuple))
         if not is_batched_input:
             texts = cast(list[str], [texts])
 
@@ -199,26 +200,36 @@ class Translator(Seq2Seq):
 
         return validation_loss, validation_perplexity
 
-    def evaluate_bleu(self, sources: Sequence[str], targets: Sequence[str], max_ngram_order: int = 4) -> dict[str, Any]:
+    def evaluate_bleu(
+        self,
+        sources: Sequence[str],
+        targets: Sequence[Sequence[str]],
+        *,
+        lowercase: bool = False,
+        max_ngram_order: int = 4,
+        batch_size: int = 32,
+    ) -> BLEUScore:
         """Calculates the BLEU score for the targets and the translation of the given sources.
 
         Args:
-            sources: Sources that are translated.
-            targets: Target text for each of the given sources.
-            max_ngram_order: Bleu considers all n-gram precisions, where 1<=n<=max_ngram_order. Defaults to 4.
+            sources: The source texts to be translated.
+            targets: The valid target texts for source.
+            max_ngram_order: Let BLEU consider all n-gram precisions, where 1 <= n <= max_ngram_order.
+            lowercase: If True, the lowercased BLEU will be computed.
+            batch_size: The batch size used for the translation model.
 
         Returns:
-            Dictionary containing the score, the individual precisions and the length of the translation and the target.
+            An instance of the sacremoses `BLEUScore`.
         """
-        translated_sources: list[str] = [self.translate(source) for source in sources]
-        bleu = BLEU(max_ngram_order=max_ngram_order)
-        bleu_corpus_score = bleu.corpus_score(translated_sources, [targets])
-        return {
-            "score": bleu_corpus_score.score,
-            "precisions": bleu_corpus_score.precisions,
-            "source_len": bleu_corpus_score.sys_len,
-            "target_len": bleu_corpus_score.ref_len,
-        }
+        source_batches: list[tuple[str, ...]] = list(more_itertools.batched(sources, n=batch_size))
+        translated_sources: list[str] = [
+            source
+            for sources_batch in tqdm(source_batches, desc="Evaluating Model", unit="batch", leave=False)
+            for source in self.translate(sources_batch)
+        ]
+        bleu: BLEU = BLEU(lowercase=lowercase, max_ngram_order=max_ngram_order)
+        bleu_corpus_score: BLEUScore = bleu.corpus_score(hypotheses=translated_sources, references=targets)
+        return bleu_corpus_score
 
     def save(self, f: str | Path | IO[bytes]) -> None:
         if self.encoder.dropout.p != self.decoder.dropout.p:

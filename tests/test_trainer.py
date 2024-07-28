@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 from gensim.models import KeyedVectors, Word2Vec
+from sacremoses import MosesDetokenizer
 
 from translator.datasets import ParallelCorpus
 from translator.language import Language
@@ -16,6 +17,8 @@ from translator.utils.torch import detect_device
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+    from sacrebleu.metrics.bleu import BLEUScore
 
 
 @pytest.fixture()
@@ -40,7 +43,7 @@ class TestModelTrainer:
         "translator_kwargs",
         [
             {},
-            {"attention": True, "propagate_hidden_and_cell_state": False},
+            {"attention": True},
             {"bidirectional_encoder": True},
             {"encoder_num_layers": 4, "decoder_num_layers": 2, "hidden_size": 64},
             {
@@ -89,6 +92,7 @@ class TestModelTrainer:
             target_language=target_language,
             source_tokenizer=source_tokenizer,
             target_tokenizer=target_tokenizer,
+            target_detokenizer=MosesDetokenizer(target_language.name).detokenize,
             **translator_kwargs,
         )
         translator.to(detect_device())
@@ -98,6 +102,13 @@ class TestModelTrainer:
         test_perplexity: float = model_trainer.train(max_epochs=10, learning_rate=0.01, batch_size=2)
         assert 1.0 <= test_perplexity <= 1.05
 
+        bleu: BLEUScore = translator.evaluate_bleu(
+            sources=test_split.source_sentences,
+            targets=[[t] for t in test_split.target_sentences],
+            lowercase=True,
+        )
+        assert bleu.score >= 99
+
         # Save and reload the model.
         with BytesIO() as buffer:
             translator.save(buffer)
@@ -106,7 +117,7 @@ class TestModelTrainer:
 
         # Translate an example sentence.
         translation: str = translator.translate("Frau Präsidentin, zur Geschäftsordnung.")
-        expected: str = "Madam President , on a point of order .".lower()
+        expected: str = "Madam President, on a point of order.".lower()
         assert translation == expected
 
     @pytest.mark.integration()
@@ -152,6 +163,7 @@ class TestModelTrainer:
             target_language=target_language,
             source_tokenizer=source_tokenizer,
             target_tokenizer=target_tokenizer,
+            target_detokenizer=MosesDetokenizer(target_language.name).detokenize,
             source_embedding_size=source_pretrained_embeddings.vector_size,
             target_embedding_size=target_pretrained_embeddings.vector_size,
             source_pretrained_embeddings=source_pretrained_embeddings,
@@ -165,6 +177,13 @@ class TestModelTrainer:
         test_perplexity: float = model_trainer.train(max_epochs=10, learning_rate=0.01, batch_size=2)
         assert 1.0 <= test_perplexity <= 1.05
 
+        bleu: BLEUScore = translator.evaluate_bleu(
+            sources=test_split.source_sentences,
+            targets=[[t] for t in test_split.target_sentences],
+            lowercase=True,
+        )
+        assert bleu.score >= 99
+
         # Save and reload the model.
         with BytesIO() as buffer:
             translator.save(buffer)
@@ -173,5 +192,5 @@ class TestModelTrainer:
 
         # Translate an example sentence.
         translation: str = translator.translate("Frau Präsidentin, zur Geschäftsordnung.")
-        expected: str = "Madam President , on a point of order .".lower()
+        expected: str = "Madam President, on a point of order.".lower()
         assert translation == expected

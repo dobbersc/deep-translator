@@ -24,6 +24,7 @@ classifiers = [
 keywords = ["natural language processing", "machine translation", "deep learning"]
 dependencies = [
     "gensim~=4.3.0",
+    "more-itertools~=10.3.0",
     "numpy~=1.26.0",
     "regex==2024.5.15",
     "sacrebleu~=2.4.0",
@@ -39,10 +40,11 @@ dependencies = [
 
 [project.optional-dependencies]
 experiments = [
+    "fasttext~0.9.0",
+    "matplotlib~=3.9.0",
     "spacy~=3.7.0",
     "en_core_web_sm@https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl",
     "de_core_news_sm@https://github.com/explosion/spacy-models/releases/download/de_core_news_sm-3.7.0/de_core_news_sm-3.7.0-py3-none-any.whl",
-    "matplotlib~=3.9.0",
 ]
 dev = [
     "black~=24.4.0",
