@@ -17,7 +17,7 @@ from tqdm import tqdm
 from translator.datasets import DataPoint, EuroparlCorpus
 from translator.tokenizers import preprocess
 
-from experiments import LONG_FORM, PREFERRED_PLOT_EXTENSION, RESULTS_PATH
+from experiments import LONG_FORM, PLOT_EXTENSION, RESULTS_PATH
 from experiments.spacy_taggers import load_spacy_tagger
 
 PLOTS_PATH = RESULTS_PATH / "plots"
@@ -222,7 +222,7 @@ def savefig_(filename: str, fig: Figure) -> None:
         filename: File name under which the plot is saved. The prefered extension is appended automatically.
         fig: Figure of the plot, which is closed after the plot is saved.
     """
-    plt.savefig(PLOTS_PATH / f"{filename+PREFERRED_PLOT_EXTENSION}")
+    plt.savefig(PLOTS_PATH / f"{filename + PLOT_EXTENSION}")
     plt.close(fig)
 
 

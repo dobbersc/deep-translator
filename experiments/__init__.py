@@ -1,8 +1,9 @@
 from pathlib import Path
 from typing import Final
 
-RESULTS_PATH: Final[Path] = Path(__file__).parent / "results"
-PREFERRED_PLOT_EXTENSION: Final[str] = ".pdf"
+RESULTS_PATH: Final[Path] = Path(__file__).parents[1] / "results"
+
+PLOT_EXTENSION: Final[str] = ".pdf"
 LONG_FORM: Final[dict[str, str]] = {
     "en": "English",
     "bg": "Bulgarian",
