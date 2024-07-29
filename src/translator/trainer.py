@@ -144,7 +144,11 @@ class ModelTrainer:
             optimizer.zero_grad()
 
             # Using the model, compute the log probabilities for each token in the target sequences.
-            predicted_log_probabilities: Tensor = self.model(sources, targets, teacher_forcing_ratio)
+            predicted_log_probabilities: Tensor = self.model(
+                sources,
+                targets,
+                teacher_forcing_ratio=teacher_forcing_ratio,
+            )
             ground_truth_targets: Tensor = self.model.decoder.make_ground_truth_sequences(targets)
 
             # Compute the loss and update the model parameters via backpropagation.
