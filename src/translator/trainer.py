@@ -1,5 +1,6 @@
 import copy
 import functools
+import gc
 import logging
 import time
 from collections.abc import Callable, Sequence
