@@ -198,12 +198,12 @@ class DecoderLSTM(Module):
 
         Returns:
             - log_probabilities: The predicted log softmax probabilities for the next token in the target vocabulary.
-                Shape: [batch_size, target_vocabulary_size].
+              Shape: [batch_size, target_vocabulary_size].
             - last_hidden_and_cell: The updated (hidden, cell) state of the decoder's LSTM after processing the input
-                (each of shape: [decoder_num_layers, batch_size, decoder_hidden_size]).
-            - attention_distribution_and_output: A tuple of the attention scores and attention distribution
-                if attention is enabled. Otherwise, this value will be `None` for compatibility.
-                Each of shape [batch_size, output_sequence_length, context_sequence_length].
+              (each of shape: [decoder_num_layers, batch_size, decoder_hidden_size]).
+            - attention_scores_and_distribution: A tuple of the attention scores and attention distribution
+              if attention is enabled. Otherwise, this value will be `None` for compatibility.
+              Each of shape [batch_size, max(source_sequence_lengths)].
         """
         if self.attention is not None and encoder_hidden_states is None:
             msg: str = "The 'encoder_hidden_states' parameter must be provided when attention is enabled."
@@ -218,12 +218,18 @@ class DecoderLSTM(Module):
 
         output, last_hidden_and_cell = self.lstm(embedded, hidden_and_cell)
 
-        attention_distribution_and_output: tuple[Tensor, Tensor] | None = None
+        # Compute attention.
+        attention_scores_and_distribution: tuple[Tensor, Tensor] | None = None
         if self.attention:
-            output, attention_distribution_and_output = self.attention(
+            output, attention_scores_and_distribution = self.attention(
                 output=output,
                 context=encoder_hidden_states,
                 mask=None if attention_mask is None else attention_mask.unsqueeze(dim=1),
+            )
+            assert attention_scores_and_distribution is not None
+            attention_scores_and_distribution = (
+                attention_scores_and_distribution[0].squeeze(dim=1),
+                attention_scores_and_distribution[1].squeeze(dim=1),
             )
 
         # Transform the batch's hidden states to the vocabulary space and
@@ -231,7 +237,7 @@ class DecoderLSTM(Module):
         logits: Tensor = self.hidden2vocab(output)
         log_probabilities: Tensor = self.log_softmax(logits)
 
-        return log_probabilities.squeeze(dim=1), last_hidden_and_cell, attention_distribution_and_output
+        return log_probabilities.squeeze(dim=1), last_hidden_and_cell, attention_scores_and_distribution
 
     def forward(
         self,
@@ -240,7 +246,7 @@ class DecoderLSTM(Module):
         encoder_hidden_and_cell: tuple[Tensor, Tensor] | None = None,
         attention_mask: Tensor | None = None,
         teacher_forcing_ratio: float = 0.5,
-    ) -> Tensor:
+    ) -> tuple[Tensor, tuple[Tensor, Tensor] | None]:
         """Forwards batches of (padded) targets as tensor of token indices through the decoder.
 
         For the following argument descriptions, we define D := 2 if bidirectional_encoder; otherwise 1.
@@ -265,8 +271,11 @@ class DecoderLSTM(Module):
                 If the random number is below the specified value, teacher forcing will be applied (default is 0.5).
 
         Returns:
-            The predicted log softmax probabilities in the target vocabulary for each token in the target sequence.
-            Shape: [batch_size, max(target_sequence_lengths), target_vocabulary_size].
+            - prediction_log_probabilities: The predicted log softmax probabilities in the target vocabulary for each
+              token in the target sequence. Shape: [batch_size, max(target_sequence_lengths), target_vocabulary_size].
+            - attention_scores_and_distributions: A tuple of the attention scores and attention distributions
+              if attention is enabled. Otherwise, this value will be `None` for compatibility.
+              Each of shape [batch_size, max(target_sequence_lengths), max(source_sequence_lengths)].
         """
         msg: str
         if self.attention is None and encoder_hidden_and_cell is None:
@@ -288,12 +297,30 @@ class DecoderLSTM(Module):
             device=self.device,
         )
 
-        decoder_output: Tensor | None = None  # Shape: [batch_size, target_vocabulary_size]
+        # Create tensors that contains the attention scores and distributions for each predicted token.
+        # For now, the batch_size is in the second dimension!
+        attention_scores: Tensor | None = None
+        attention_distributions: Tensor | None = None
+        if self.attention is not None:
+            assert encoder_hidden_states is not None
+
+            source_sequence_length: int = encoder_hidden_states.size(dim=1)
+            attention_scores = torch.empty(
+                (target_sequence_length, batch_size, source_sequence_length),
+                dtype=torch.float,
+                device=self.device,
+            )
+            attention_distributions = torch.empty(
+                (target_sequence_length, batch_size, source_sequence_length),
+                dtype=torch.float,
+                device=self.device,
+            )
 
         # If provided, the decoder's initial (hidden, cell) state is the encoder's last (hidden, cell) state.
         decoder_hidden_and_cell: tuple[Tensor, Tensor] | None = self._init_decoder_hidden_and_cell(
             encoder_hidden_and_cell,
         )
+        decoder_output: Tensor | None = None  # Shape: [batch_size, target_vocabulary_size]
 
         # Iterate batch-wise through every token in the decoder input sequences and
         # populate the prediction log probabilities tensor. Shape: [batch_size].
@@ -308,17 +335,28 @@ class DecoderLSTM(Module):
                 decoder_input if use_teacher_forcing else decoder_output.argmax(dim=1).detach()  # type: ignore[union-attr]
             )
 
-            decoder_output, decoder_hidden_and_cell, _ = self.step(
+            decoder_output, decoder_hidden_and_cell, attention_scores_and_distribution = self.step(
                 effective_decoder_input,
                 hidden_and_cell=decoder_hidden_and_cell,
                 encoder_hidden_states=encoder_hidden_states,
                 attention_mask=attention_mask,
             )
             prediction_log_probabilities[sequence_index] = decoder_output
+            if attention_scores_and_distribution is not None:
+                assert attention_scores is not None
+                assert attention_distributions is not None
+                attention_scores[sequence_index] = attention_scores_and_distribution[0]
+                attention_distributions[sequence_index] = attention_scores_and_distribution[1]
 
-        # Transpose the prediction log probabilities back to a batch first representation.
-        # Shape: [batch_size, max(target_sequence_lengths), target_vocabulary_size].
-        return prediction_log_probabilities.transpose(0, 1)
+        # Transpose the prediction log probabilities,
+        # attention scores and distributions back to a batch first representation.
+        attention_scores_and_distributions: tuple[Tensor, Tensor] | None = None
+        if attention_scores is not None and attention_distributions is not None:
+            attention_scores_and_distributions = (
+                attention_scores.transpose(0, 1),
+                attention_distributions.transpose(0, 1),
+            )
+        return prediction_log_probabilities.transpose(0, 1), attention_scores_and_distributions
 
     def _decode_sequential(
         self,

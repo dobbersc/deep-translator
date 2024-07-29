@@ -1,4 +1,4 @@
-from typing import Any, Literal
+from typing import Any, Literal, overload
 
 from torch import Tensor
 
@@ -59,15 +59,58 @@ class Seq2Seq(Module):
             return encoder_hidden_states, encoder_hidden_and_cell
         return encoder_hidden_states, None
 
-    def forward(self, sources: Tensor, targets: Tensor, teacher_forcing_ratio: float = 0.5) -> Tensor:
+    @overload
+    def forward(
+        self,
+        sources: Tensor,
+        targets: Tensor,
+        *,
+        teacher_forcing_ratio: float = ...,
+        return_attention: Literal[False] = ...,
+    ) -> Tensor:
+        ...
+
+    @overload
+    def forward(
+        self,
+        sources: Tensor,
+        targets: Tensor,
+        *,
+        teacher_forcing_ratio: float = ...,
+        return_attention: Literal[True],
+    ) -> tuple[Tensor, tuple[Tensor, Tensor]]:
+        ...
+
+    def forward(
+        self,
+        sources: Tensor,
+        targets: Tensor,
+        *,
+        teacher_forcing_ratio: float = 0.5,
+        return_attention: bool = False,
+    ) -> Tensor | tuple[Tensor, tuple[Tensor, Tensor]]:
+        if return_attention and self.decoder.attention is None:
+            msg: str = (
+                "The attention scores and distributions are not available "
+                "when the decoder does not implement attention."
+            )
+            raise ValueError(msg)
+
         encoder_hidden_states, encoder_hidden_and_cell = self._encode(sources)
-        log_probabilities: Tensor = self.decoder(
+
+        log_probabilities: Tensor
+        attention_scores_and_distributions: tuple[Tensor, Tensor] | None
+        log_probabilities, attention_scores_and_distributions = self.decoder(
             targets,
             encoder_hidden_states=encoder_hidden_states,
             encoder_hidden_and_cell=encoder_hidden_and_cell,
             attention_mask=self.encoder.make_padding_mask(sources),
             teacher_forcing_ratio=teacher_forcing_ratio,
         )
+
+        if return_attention:
+            assert attention_scores_and_distributions is not None
+            return log_probabilities, attention_scores_and_distributions
         return log_probabilities
 
     def generate_greedy(self, sources: Tensor, max_length: int = 512) -> Tensor:
