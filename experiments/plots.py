@@ -17,11 +17,11 @@ from tqdm import tqdm
 from translator.datasets import DataPoint, EuroparlCorpus
 from translator.tokenizers import preprocess
 
-from experiments import LONG_FORM, PLOT_EXTENSION, RESULTS_PATH
+from experiments import LONG_FORM, PLOT_EXTENSION, RESULTS_DIRECTORY
 from experiments.spacy_taggers import load_spacy_tagger
 
-PLOTS_PATH = RESULTS_PATH / "plots"
-RAW_COUNTERS_PATH = RESULTS_PATH / "raw_counters"
+PLOTS_PATH = RESULTS_DIRECTORY / "plots"
+RAW_COUNTERS_PATH = RESULTS_DIRECTORY / "raw_counters"
 MODES = Literal["word", "word_length", "sentence_length", "pos_tags", "sentence_lenth_difference"]
 
 

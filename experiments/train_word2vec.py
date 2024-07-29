@@ -11,7 +11,7 @@ from translator.datasets import EuroparlCorpus
 from translator.tokenizers import Tokenizer, preprocess
 from translator.utils.random import set_seed
 
-from experiments import RESULTS_PATH
+from experiments import RESULTS_DIRECTORY
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -53,7 +53,7 @@ def train(langauge: str, sentences: Sequence[str]) -> None:
         workers=64,
         callbacks=[Callback()],
     )
-    out_directory: Path = RESULTS_PATH / "embeddings" / langauge
+    out_directory: Path = RESULTS_DIRECTORY / "embeddings" / langauge
     out_directory.mkdir(parents=True, exist_ok=True)
     pretrained_embeddings.wv.save_word2vec_format(out_directory / "vectors.txt")
 
