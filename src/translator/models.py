@@ -308,3 +308,70 @@ class Translator(Seq2Seq):
 
         translator.eval()
         return translator
+
+
+# TODO: Unify class interface of Translator and PivotTranslator.
+# TODO: The PivotTranslator may also accept other PivotTranslators ans source and target translators.
+
+
+class PivotTranslator:
+    def __init__(self, source2pivot: Translator, pivot2target: Translator) -> None:
+        if source2pivot.target_language.name != pivot2target.source_language.name:
+            msg: str = (
+                "The target language of the source2pivot translator must match "
+                "the source language of the pivot2target translator."
+            )
+            raise ValueError(msg)
+
+        self.source2pivot = source2pivot
+        self.pivot2target = pivot2target
+
+    @overload
+    def translate(
+        self,
+        texts: str,
+        method: Literal["greedy", "sampled", "beam-search"] = ...,
+        max_length: int = ...,
+        **kwargs: Any,
+    ) -> str:
+        ...
+
+    @overload
+    def translate(
+        self,
+        texts: list[str] | tuple[str, ...],
+        method: Literal["greedy", "sampled", "beam-search"] = ...,
+        max_length: int = ...,
+        **kwargs: Any,
+    ) -> list[str]:
+        ...
+
+    def translate(
+        self,
+        texts: str | list[str] | tuple[str, ...],
+        method: Literal["greedy", "sampled", "beam-search"] = "sampled",
+        max_length: int = 512,
+        **kwargs: Any,
+    ) -> str | list[str]:
+        pivots = self.source2pivot.translate(texts, method=method, max_length=max_length, **kwargs)
+        return self.pivot2target.translate(pivots, method=method, max_length=max_length, **kwargs)
+
+    @property
+    def source_language(self) -> str:
+        return self.source2pivot.source_language.name
+
+    @property
+    def pivot_language(self) -> str:
+        return self.source2pivot.target_language.name
+
+    @property
+    def target_language(self) -> str:
+        return self.pivot2target.target_language.name
+
+    def __repr__(self) -> str:
+        return (
+            f"{type(self).__name__}<"
+            f"source_language={self.source_language!r}, "
+            f"pivot_language={self.pivot_language!r}, "
+            f"target_language={self.target_language!r}>"
+        )
