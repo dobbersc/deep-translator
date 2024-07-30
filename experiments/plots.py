@@ -226,14 +226,14 @@ def savefig_(filename: str, fig: Figure) -> None:
     plt.close(fig)
 
 
-def save_raw_counter(filename: str, counter: Counter) -> None:
+def save_raw_counter(filename: str, counter: Counter[Any]) -> None:
     """Saves the input counter as a json file.
 
     Args:
         filename: Name of the json file.
         counter: The counter to be saved.
     """
-    with open(RAW_COUNTERS_PATH / filename, "w") as json_file:
+    with (RAW_COUNTERS_PATH / filename).open("w") as json_file:
         json.dump(dict(counter), json_file)
 
 
