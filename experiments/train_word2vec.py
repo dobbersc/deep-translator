@@ -37,10 +37,10 @@ class Callback(CallbackAny2Vec):
         self.loss_previous_step = loss
 
 
-def train(langauge: str, sentences: Sequence[str]) -> None:
-    tokenizer: Tokenizer = functools.partial(preprocess, language=langauge, lowercase=True)
+def train(language: str, sentences: Sequence[str]) -> None:
+    tokenizer: Tokenizer = functools.partial(preprocess, language=language, lowercase=True)
 
-    logger.info("Training Embeddings for Language %r", langauge)
+    logger.info("Training Embeddings for Language %r", language)
     tokenized_sentences: list[Sequence[str]] = [
         tokenizer(sentence) for sentence in tqdm(sentences, desc="Tokenizing Sentences", unit="sentence")
     ]
@@ -53,7 +53,7 @@ def train(langauge: str, sentences: Sequence[str]) -> None:
         workers=64,
         callbacks=[Callback()],
     )
-    out_directory: Path = RESULTS_DIRECTORY / "embeddings" / langauge
+    out_directory: Path = RESULTS_DIRECTORY / "embeddings" / language
     out_directory.mkdir(parents=True, exist_ok=True)
     pretrained_embeddings.wv.save_word2vec_format(out_directory / "vectors.txt")
 
