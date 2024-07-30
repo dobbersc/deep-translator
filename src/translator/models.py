@@ -277,8 +277,8 @@ class Translator(Seq2Seq):
         torch.save(serialized, f)
 
     @classmethod
-    def load(cls, f: str | Path | IO[bytes]) -> Self:
-        serialized: dict[str, dict[str, Any]] = torch.load(f)
+    def load(cls, f: str | Path | IO[bytes], **kwargs: Any) -> Self:
+        serialized: dict[str, dict[str, Any]] = torch.load(f, **kwargs)
 
         parameters: dict[str, Any] = serialized["parameters"]
         translator: Self = cls(

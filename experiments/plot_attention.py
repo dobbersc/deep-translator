@@ -75,6 +75,7 @@ def main() -> None:
     device: torch.device = detect_device()
     translator: Translator = Translator.load(
         RESULTS_DIRECTORY / "models" / "de2en" / "word_word2vec_embeddings_with_attention" / "model.pt",
+        map_location=device,
     )
     translator.to(device)
 
